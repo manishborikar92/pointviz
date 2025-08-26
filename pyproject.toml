@@ -1,0 +1,95 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pcd-visualizer"
+version = "2.0.0"
+description = "A powerful tool for visualizing point cloud data with LVX conversion capabilities"
+authors = [
+    {name = "PCD Visualizer Team", email = "contact@pcdvisualizer.com"}
+]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
+keywords = ["point-cloud", "visualization", "3d", "pcd", "lvx", "open3d", "pyvista"]
+
+dependencies = [
+    "PyQt6>=6.4.0",
+    "open3d>=0.17.0",
+    "pyvista>=0.42.0",
+    "pyvistaqt>=0.11.0",
+    "matplotlib>=3.6.0",
+    "numpy>=1.21.0",
+    "vtk>=9.2.0",
+    "scipy>=1.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-qt>=4.2.0",
+    "black>=22.0",
+    "flake8>=5.0",
+    "mypy>=0.991",
+]
+build = [
+    "cx_Freeze>=6.13.1",
+    "pyinstaller>=5.7.0",
+    "py2app>=0.28.4; platform_system=='Darwin'",
+]
+
+[project.scripts]
+pcd-visualizer = "pcd_visualizer.main:main"
+
+[project.gui-scripts]
+pcd-visualizer-gui = "pcd_visualizer.main:main"
+
+[project.urls]
+Homepage = "https://github.com/pcdvisualizer/pcd-visualizer"
+Documentation = "https://pcdvisualizer.readthedocs.io/"
+Repository = "https://github.com/pcdvisualizer/pcd-visualizer.git"
+"Bug Tracker" = "https://github.com/pcdvisualizer/pcd-visualizer/issues"
+
+[tool.setuptools]
+packages = ["pcd_visualizer", "pcd_visualizer.gui"]
+
+[tool.setuptools.package-data]
+pcd_visualizer = ["gui/*.py", "resources/*", "icons/*", "*.ui"]
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
