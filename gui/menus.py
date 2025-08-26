@@ -67,7 +67,7 @@ class MenuManager:
         tools_menu = menubar.addMenu('Tools')
         
         # LVX to PCD Conversion action
-        lvx_convert_action = QAction('Convert LVX to PCD...', self.main_window)
+        lvx_convert_action = QAction('Convert LVX to PCD', self.main_window)
         lvx_convert_action.setShortcut('Ctrl+L')
         lvx_convert_action.triggered.connect(self.open_lvx_conversion_dialog)
         tools_menu.addAction(lvx_convert_action)
