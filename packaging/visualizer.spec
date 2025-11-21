@@ -11,8 +11,7 @@ block_cipher = None
 
 # Data files to include (e.g., an icon)
 datas = [
-    ('../assets', 'assets'),
-    ('../requirements.txt', '.')
+    ('../assets', 'assets')
 ]
 
 # Hidden imports for PyInstaller to find all necessary modules

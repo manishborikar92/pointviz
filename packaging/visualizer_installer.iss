@@ -30,8 +30,6 @@ Name: "quicklaunchicon"; Description: "Create Quick Launch shortcut"; GroupDescr
 Source: "..\dist\PCDVisualizer.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; Assets (icon)
 Source: "..\assets\visualizer_icon.ico"; DestDir: "{app}\assets"; Flags: ignoreversion
-; Requirements file
-Source: "..\requirements.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 ; Start Menu shortcuts
