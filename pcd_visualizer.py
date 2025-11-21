@@ -2,13 +2,13 @@ import sys
 import os
 import numpy as np
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                             QHBoxLayout, QGridLayout, QPushButton, QLabel, 
                             QSlider, QComboBox, QFileDialog, QMessageBox, 
                             QGroupBox, QCheckBox, QSplitter, QProgressBar,
                             QTabWidget, QStatusBar, QScrollArea, QDialog,
-                            QLineEdit, QRadioButton, QButtonGroup)
+                            QLineEdit, QRadioButton, QButtonGroup, QDoubleSpinBox)
 from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal, pyqtSlot, QSettings
 from PyQt6.QtGui import QIcon, QFont, QPixmap, QPalette, QColor, QAction, QSurfaceFormat
 
@@ -19,53 +19,132 @@ import matplotlib.pyplot as plt
 
 SCRIPT_DIR = Path(__file__).parent
 
+
+class LoadOptionsDialog(QDialog):
+    """A dialog to get downsampling options from the user for large files."""
+    def __init__(self, file_size_mb: float, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Large File Options")
+        self.setMinimumWidth(350)
+
+        layout = QVBoxLayout()
+        
+        info_label = QLabel(f"This file is large (~{file_size_mb:.2f} MB).\n"
+                            "Loading all points may cause performance issues or crashes.\n"
+                            "Please choose a loading method:")
+        layout.addWidget(info_label)
+
+        # Method selection
+        self.button_group = QButtonGroup(self)
+        self.voxel_radio = QRadioButton("Voxel Downsample (Recommended)")
+        self.load_all_radio = QRadioButton("Load All Points (Not Recommended)")
+        
+        self.button_group.addButton(self.voxel_radio, 1)
+        self.button_group.addButton(self.load_all_radio, 2) # Changed ID from 3 to 2
+        self.voxel_radio.setChecked(True)
+
+        # Voxel options
+        voxel_layout = QHBoxLayout()
+        self.voxel_size_input = QDoubleSpinBox()
+        self.voxel_size_input.setDecimals(3)
+        self.voxel_size_input.setSingleStep(0.01)
+        self.voxel_size_input.setRange(0.001, 100.0)
+        self.voxel_size_input.setValue(0.05)
+        voxel_layout.addWidget(QLabel("Voxel Size:"))
+        voxel_layout.addWidget(self.voxel_size_input)
+        voxel_widget = QWidget()
+        voxel_widget.setLayout(voxel_layout)
+
+        # Connect radio buttons to enable/disable options
+        self.voxel_radio.toggled.connect(voxel_widget.setEnabled)
+        self.load_all_radio.toggled.connect(lambda checked: voxel_widget.setEnabled(not checked))
+
+        layout.addWidget(self.voxel_radio)
+        layout.addWidget(voxel_widget)
+        layout.addWidget(self.load_all_radio)
+
+        # OK and Cancel buttons
+        button_box = QHBoxLayout()
+        ok_button = QPushButton("OK")
+        cancel_button = QPushButton("Cancel")
+        ok_button.clicked.connect(self.accept)
+        cancel_button.clicked.connect(self.reject)
+        button_box.addStretch()
+        button_box.addWidget(ok_button)
+        button_box.addWidget(cancel_button)
+        layout.addLayout(button_box)
+
+        self.setLayout(layout)
+
+    def get_options(self) -> Optional[dict]:
+        """Return the selected options or None if canceled."""
+        if self.exec() == QDialog.DialogCode.Accepted:
+            method_id = self.button_group.checkedId()
+            if method_id == 1: # Voxel
+                return {"method": "voxel", "value": self.voxel_size_input.value()}
+            else: # Load all (ID is now 2)
+                return {"method": "none", "value": None}
+        return None
+
+
 class PointCloudProcessor(QThread):
-    """Thread for processing point cloud operations"""
+    """Thread for processing point cloud operations with downsampling."""
     finished = pyqtSignal()
     progress = pyqtSignal(int)
     error = pyqtSignal(str)
-    loaded = pyqtSignal(object)
+    # Emits the processed (possibly downsampled) point cloud and the original point count
+    loaded = pyqtSignal(object, int)
     
-    def __init__(self, file_path: str, operation: str = "load"):
+    def __init__(self, file_path: str, load_options: dict, operation: str = "load"):
         super().__init__()
         self.file_path = file_path
         self.operation = operation
-        self.point_cloud = None
+        self.load_options = load_options
         
     def run(self):
         try:
             self.progress.emit(10)
             
             if self.operation == "load":
-                # Load point cloud
+                # Load the full point cloud
                 file_ext = Path(self.file_path).suffix.lower()
                 
                 if file_ext in ['.pcd', '.ply']:
-                    self.point_cloud = o3d.io.read_point_cloud(self.file_path)
+                    pcd = o3d.io.read_point_cloud(self.file_path)
                 else:
                     raise ValueError(f"Unsupported file format: {file_ext}. Supported formats: .pcd, .ply")
                 
-                if len(self.point_cloud.points) == 0:
+                if len(pcd.points) == 0:
                     raise ValueError("No points found in the file")
                 
+                original_point_count = len(pcd.points)
                 self.progress.emit(30)
                 
-                # Estimate normals if not present
-                if not self.point_cloud.has_normals():
-                    self.point_cloud.estimate_normals(
+                # Apply downsampling based on options
+                method = self.load_options.get("method", "none")
+                value = self.load_options.get("value")
+                
+                processed_pcd = pcd
+                if method == "voxel" and value > 0:
+                    processed_pcd = pcd.voxel_down_sample(voxel_size=value)
+                
+                self.progress.emit(60)
+
+                # Perform heavy computations ONLY on the downsampled cloud
+                if not processed_pcd.has_normals():
+                    processed_pcd.estimate_normals(
                         search_param=o3d.geometry.KDTreeSearchParamHybrid(
                             radius=0.1, max_nn=30))
                 
-                self.progress.emit(60)
+                self.progress.emit(80)
                 
-                # Center the point cloud
-                center = self.point_cloud.get_center()
-                self.point_cloud.translate(-center)
+                center = processed_pcd.get_center()
+                processed_pcd.translate(-center)
                 
                 self.progress.emit(90)
                 
-                # Emit the loaded point cloud
-                self.loaded.emit(self.point_cloud)
+                # Emit the processed point cloud and original point count
+                self.loaded.emit(processed_pcd, original_point_count)
                 
                 self.progress.emit(100)
                 
@@ -107,7 +186,7 @@ class PyVistaWidget(QWidget):
         self.current_point_cloud = None
         
         # Track current visualization settings
-        self.current_point_size = 5
+        self.current_point_size = 2  # Default point size is 2
         self.current_color_mode = 'Original'
         self.current_background = 'Gradient'
         self.show_normals = False
@@ -479,7 +558,7 @@ class PCDVisualizer(QMainWindow):
     def __init__(self, initial_file_path: Optional[str] = None):
         super().__init__()
         self.point_cloud = None
-        self.original_point_cloud = None
+        self.original_point_count = 0
         self.processor_thread = None
         self.settings = QSettings('PCDVisualizer', 'Settings')
         self.initial_file_path = initial_file_path
@@ -603,11 +682,11 @@ class PCDVisualizer(QMainWindow):
         viz_layout.addWidget(QLabel("Point Size:"), 0, 0)
         self.point_size_slider = QSlider(Qt.Orientation.Horizontal)
         self.point_size_slider.setRange(1, 20)
-        self.point_size_slider.setValue(5)
+        self.point_size_slider.setValue(2)  # Default slider value is 2
         self.point_size_slider.valueChanged.connect(self._on_point_size_changed)
         viz_layout.addWidget(self.point_size_slider, 0, 1)
         
-        self.point_size_label = QLabel("5")
+        self.point_size_label = QLabel("2")  # Default label text is "2"
         self.point_size_label.setMinimumWidth(25)
         viz_layout.addWidget(self.point_size_label, 0, 2)
         
@@ -858,12 +937,24 @@ class PCDVisualizer(QMainWindow):
             self._load_specific_file(self.initial_file_path)
     
     def _load_specific_file(self, file_path: str):
-        """Load a specific file path"""
-        if not Path(file_path).exists():
+        """Load a specific file path with downsampling options for large files."""
+        p_file = Path(file_path)
+        if not p_file.exists():
             QMessageBox.warning(self, "File Not Found", f"File does not exist: {file_path}")
             return
+
+        file_size_mb = p_file.stat().st_size / (1024 * 1024)
+        load_options = {"method": "none", "value": None}
+
+        # For large files (e.g., > 100MB), ask the user for loading options
+        if file_size_mb > 100:
+            dialog = LoadOptionsDialog(file_size_mb, self)
+            options = dialog.get_options()
+            if options is None: # User cancelled
+                return
+            load_options = options
             
-        self.file_label.setText(f"Loading: {Path(file_path).name}")
+        self.file_label.setText(f"Loading: {p_file.name}")
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
         self.status_bar.showMessage("Loading point cloud...")
@@ -871,8 +962,8 @@ class PCDVisualizer(QMainWindow):
         # Disable UI during loading
         self.setEnabled(False)
         
-        # Start processing thread
-        self.processor_thread = PointCloudProcessor(file_path)
+        # Start processing thread with load options
+        self.processor_thread = PointCloudProcessor(file_path, load_options)
         self.processor_thread.progress.connect(self.progress_bar.setValue)
         self.processor_thread.error.connect(self._show_error)
         self.processor_thread.loaded.connect(self._on_point_cloud_loaded)
@@ -892,6 +983,7 @@ class PCDVisualizer(QMainWindow):
         
         if file_path:
             try:
+                # Note: This exports the potentially downsampled point cloud
                 o3d.io.write_point_cloud(file_path, self.point_cloud)
                 QMessageBox.information(self, "Success", f"Point cloud exported to {file_path}")
             except Exception as e:
@@ -916,21 +1008,26 @@ class PCDVisualizer(QMainWindow):
                 QMessageBox.warning(self, "Warning", "Failed to save screenshot")
     
     # Processing callbacks
-    def _on_point_cloud_loaded(self, point_cloud):
-        """Handle successful point cloud loading"""
+    @pyqtSlot(object, int)
+    def _on_point_cloud_loaded(self, point_cloud, original_point_count):
+        """Handle successful point cloud loading, receiving original count."""
         self.point_cloud = point_cloud
-        self.original_point_cloud = o3d.geometry.PointCloud(point_cloud)
+        self.original_point_count = original_point_count
         
         # Update UI
-        point_count = len(point_cloud.points)
-        self.file_label.setText(f"Loaded: {point_count:,} points")
+        displayed_count = len(point_cloud.points)
+        if displayed_count < original_point_count:
+            self.file_label.setText(f"Loaded: {displayed_count:,} points\n"
+                                    f"(Downsampled from {original_point_count:,})")
+        else:
+            self.file_label.setText(f"Loaded: {displayed_count:,} points")
         
         # Update statistics and visualization
         self._update_statistics()
         self.pyvista_widget.update_point_cloud(point_cloud, force_refresh=True)
         
         # Update status and enable controls
-        self.status_bar.showMessage(f"Loaded {point_count:,} points successfully")
+        self.status_bar.showMessage(f"Displayed {displayed_count:,} of {original_point_count:,} points successfully")
         self._enable_point_cloud_controls(True)
         
     def _on_processing_finished(self):
@@ -961,10 +1058,8 @@ class PCDVisualizer(QMainWindow):
             return
             
         points = np.asarray(self.point_cloud.points)
-        point_count = len(points)
         
-        # Update each statistics section
-        self._update_basic_stats(points, point_count)
+        self._update_basic_stats(points)
         self._update_geometric_stats(points)
         self._update_features_stats()
         self._update_additional_stats(points)
@@ -980,11 +1075,14 @@ class PCDVisualizer(QMainWindow):
         for label in labels:
             label.setText("No point cloud loaded" if label == self.basic_stats_label else "No data available")
     
-    def _update_basic_stats(self, points: np.ndarray, point_count: int):
-        """Update basic statistics"""
-        basic_info = f"""Points: {point_count:,}
+    def _update_basic_stats(self, points: np.ndarray):
+        """Update basic statistics with original and displayed counts."""
+        displayed_count = len(points)
+        
+        basic_info = f"""Displayed Points: {displayed_count:,}
+Original Points:  {self.original_point_count:,}
 Dimensions: {points.shape}
-Memory: {points.nbytes / 1024 / 1024:.2f} MB"""
+Memory (Displayed): {points.nbytes / 1024 / 1024:.2f} MB"""
         self.basic_stats_label.setText(basic_info)
     
     def _update_geometric_stats(self, points: np.ndarray):
@@ -1284,10 +1382,12 @@ Average Magnitude: {avg_magnitude:.6f}"""
 
         about_text = """
         <h3>PCD Point Cloud Visualizer</h3>
-        <p>A powerful tool for visualizing point cloud data, built with PyQt6, Open3D, and PyVista.</p>
+        <p>A powerful and responsive tool for visualizing 3D point cloud data files (e.g., .pcd, .ply).</p>
+        <p>This visualizer is designed to handle large datasets efficiently, providing a smooth user experience for inspection and analysis.</p>
         
         <h4>Key Features:</h4>
         <ul>
+            <li><b>Optimized for Large Datasets</b> with Voxel downsampling</li>
             <li>Point size control with smooth updates</li>
             <li>Multiple color modes and gradient backgrounds</li>
             <li>Dark/Light mode with system theme detection</li>
@@ -1296,20 +1396,20 @@ Average Magnitude: {avg_magnitude:.6f}"""
             <li>Export capabilities for screenshots and data</li>
         </ul>
 
-        <p>Developed by: <b>Quantnueral Pvt. Ltd.</b></p>
+        <!-- <p>Developed by: <b>Quantnueral Pvt. Ltd.</b></p> -->
         """
 
         layout = QVBoxLayout()
         
         # Add company logo with theme detection
-        logo_label = QLabel()
+        # logo_label = QLabel()
         
         # Choose logo based on theme
-        logo_filename = "logo_dark.png" if self.is_dark_mode else "logo_light.png"
-        logo_path = SCRIPT_DIR / "assets" / logo_filename
+        # logo_filename = "logo_dark.png" if self.is_dark_mode else "logo_light.png"
+        # logo_path = SCRIPT_DIR / "assets" / logo_filename
 
-        logo_label.setPixmap(QIcon(str(logo_path)).pixmap(140, 25))
-        logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # logo_label.setPixmap(QIcon(str(logo_path)).pixmap(140, 25))
+        # logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         label = QLabel(about_text)
         label.setWordWrap(True)
@@ -1319,15 +1419,15 @@ Average Magnitude: {avg_magnitude:.6f}"""
         ok_button = QPushButton("OK")
         ok_button.clicked.connect(about_dialog.accept)
         
-        layout.addWidget(logo_label)
+        # layout.addWidget(logo_label)
         
-        layout.addSpacing(5)
-        separator = QWidget()
-        separator.setFixedHeight(1)
-        separator_color = "#5a5a5a" if self.is_dark_mode else "#d0d0d0"
-        separator.setStyleSheet(f"background-color: {separator_color};")
-        layout.addWidget(separator)
-        layout.addSpacing(5)
+        # layout.addSpacing(5)
+        # separator = QWidget()
+        # separator.setFixedHeight(1)
+        # separator_color = "#5a5a5a" if self.is_dark_mode else "#d0d0d0"
+        # separator.setStyleSheet(f"background-color: {separator_color};")
+        # layout.addWidget(separator)
+        # layout.addSpacing(5)
         
         layout.addWidget(label)
         layout.addStretch()
@@ -1451,3 +1551,4 @@ if __name__ == "__main__":
 # Usage:
 # cd iwlars-core
 # python pcd_visualizer.py
+# python ui/pcd_visualizer_optimized.py [path_to_your_pcd_file.pcd]
