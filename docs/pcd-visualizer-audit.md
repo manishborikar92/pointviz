@@ -27,11 +27,6 @@ This document is a complete, evidence-based assessment of the **PCD Point Cloud 
 
 **Missing entirely from the repository:**
 - Test suite of any kind
-- CI/CD configuration
-- `setup.py` / `pyproject.toml` / `setup.cfg`
-- `.env` or environment configuration
-- Any sample data files
-- `CHANGELOG.md` or `CONTRIBUTING.md`
 
 ### 1.3 Application Purpose & Workflows
 
@@ -123,7 +118,6 @@ classDiagram
 |---|---|---|
 | **matplotlib is overkill** | Only 5 calls to `plt.colormaps.get_cmap()` at [L380, L390, L401, L420](pcd_visualizer.py#L380) | Adds ~30 MB to the packaged binary for functionality achievable with `cm.get_cmap()` from matplotlib.cm or direct NumPy LUTs |
 | **No Python version specified** | Missing `python_requires` and no runtime marker | Open3D 0.19 requires Python ≥ 3.8; PyQt6 6.9 requires ≥ 3.9 |
-| **No `pyproject.toml`** | Only `requirements.txt` exists | No standardized build metadata, no editable installs, no tool config |
 | **PyInstaller not in requirements** | Only installed ad-hoc in [build_visualizer.bat L33](packaging/build_visualizer.bat#L33) | Build reproducibility risk |
 | **Strict version pins without ranges** | `==` for all packages in [requirements.txt](requirements.txt) | Makes routine security updates harder |
 
@@ -356,7 +350,7 @@ This reduces 125 lines to ~35 lines.
 ### 7.1 Current State
 
 > [!WARNING]
-> **Zero test coverage.** No test files, no test framework, no CI/CD. There is no way to verify correctness of any component without manual testing.
+> **Zero test coverage.** No test files and no test framework. There is no way to verify correctness of any component without manual testing.
 
 ### 7.2 Recommended Testing Architecture
 
@@ -481,9 +475,8 @@ This reduces 125 lines to ~35 lines.
 | M2 | **Duplicate theme stylesheets** | 125 lines at [L1239–L1367](pcd_visualizer.py#L1239-L1367) | Double maintenance | Template-based approach |
 | M3 | **`QSettings` initialized but unused** | [L563](pcd_visualizer.py#L563) | Wasted infrastructure | Implement recent files |
 | M4 | **Export blocks main thread** | [L987](pcd_visualizer.py#L987) | UI freeze on large export | Move to background thread |
-| M5 | **No `pyproject.toml`** | Only `requirements.txt` | No standardized build/tool config | Create `pyproject.toml` |
-| M6 | **Full re-render on color mode change** | [L474](pcd_visualizer.py#L474) | Unnecessary VTK actor churn | Update scalars in-place |
-| M7 | **`COLOR_MODES` dict values unused** | [L162–L169](pcd_visualizer.py#L162-L169) | Dead code | Remove internal mapping or use it |
+| M5 | **Full re-render on color mode change** | [L474](pcd_visualizer.py#L474) | Unnecessary VTK actor churn | Update scalars in-place |
+| M6 | **`COLOR_MODES` dict values unused** | [L162–L169](pcd_visualizer.py#L162-L169) | Dead code | Remove internal mapping or use it |
 
 ### Low Priority
 
@@ -505,9 +498,9 @@ This reduces 125 lines to ~35 lines.
 **Objectives:** Fix critical bugs; establish baseline reliability.
 
 **Tasks:**
-1. Fix C2: Make `render_points_as_spheres` conditional (use flat points when `len(points) > 50_000`)
-2. Fix C3: Replace curvature with proper KNN-based estimation using Open3D
-3. Fix C4: Remove `'QT_OPENGL': 'software'` (or make it a fallback, not default)
+1. Fix C1: Make `render_points_as_spheres` conditional (use flat points when `len(points) > 50_000`)
+2. Fix C2: Replace curvature with proper KNN-based estimation using Open3D
+3. Fix C3: Remove `'QT_OPENGL': 'software'` (or make it a fallback, not default)
 4. Fix H3: Replace bare `except:` with `except Exception:`
 5. Fix H5: Replace `quit()/wait()` with `requestInterruption()` + checks in `run()`
 6. Fix L6: Remove `processEvents()` call
@@ -529,7 +522,7 @@ This reduces 125 lines to ~35 lines.
 
 **Tasks:**
 1. Fix H6: Defer normal estimation — only compute when user enables normals or selects Normal color mode
-2. Fix M6: Update VTK scalars in-place instead of full re-render on color mode change
+2. Fix M5: Update VTK scalars in-place instead of full re-render on color mode change
 3. Add color array caching — cache computed color arrays keyed by color mode, invalidate on point cloud change
 4. Fix M4: Move export to background thread with progress dialog
 5. Add adaptive point size (Feature 4) — auto-set point size and sphere rendering based on point count
@@ -564,9 +557,8 @@ This reduces 125 lines to ~35 lines.
 10. Extract `gui/main_window.py` — main window shell
 11. Add `logging` module integration (fix H4) — replace all `print()` calls
 12. Create `main.py` entry point
-13. Remove dead code (L1, L2, L7 fixes)
+13. Remove dead code (L1, L2, M6 fixes)
 14. Update [visualizer.spec](packaging/visualizer.spec) for new structure
-15. Create `pyproject.toml` (fix M5)
 
 **Deliverables:**
 - Fully modularized codebase
@@ -641,12 +633,11 @@ This reduces 125 lines to ~35 lines.
 **Tasks:**
 1. Fix L4: Centralize version string in `config.py`
 2. Implement adaptive point size auto-scaling refinement
-3. Update `CHANGELOG.md` with all changes
-4. Full manual test pass: load various file sizes, all color modes, all views, themes, export, screenshot
-5. Run complete test suite
-6. Performance benchmark final report
-7. Update packaging configuration for new module structure
-8. Code review pass: verify no dead code, consistent naming, complete docstrings
+3. Full manual test pass: load various file sizes, all color modes, all views, themes, export, screenshot
+4. Run complete test suite
+5. Performance benchmark final report
+6. Update packaging configuration for new module structure
+7. Code review pass: verify no dead code, consistent naming, complete docstrings
 
 **Deliverables:**
 - Final polished application
