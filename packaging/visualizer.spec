@@ -48,7 +48,6 @@ hiddenimports = [
 # Binaries to exclude (to reduce final executable size)
 excludes = [
     'tkinter',
-    'unittest',
     'test',
     'tests',
     'pytest',

@@ -1,2 +1,76 @@
-__pycache__
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Environment variables
+.env
+.env.*
+!.env.example
+iwlars-firebase-adminsdk-fbsvc-5339e7d967.json
+config/*.enc
+
+# Virtual Environment
+venv/
+.venv/
+
+# Data files
 *.pcd
+*.ply
+*.csv
+*.h5
+*.hdf5
+*.npy
+*.npz
+*.lvx
+
+# Logs and databases
+*.log
+*.sql
+*.sqlite
+
+# Local development
+.DS_Store
+Thumbs.db
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Project specific
+data/
+logs/
+*.pdf
+*.zip
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Build and distribution
+build/
+dist/

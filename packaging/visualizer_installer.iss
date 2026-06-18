@@ -1,6 +1,9 @@
 [Setup]
+AppId=PCDVisualizer
 AppName=PCD Visualizer
 AppVersion=1.0
+UninstallDisplayName=PCD Visualizer
+UninstallDisplayIcon={app}\PCDVisualizer.exe
 AppPublisher=Quantnueral Pvt. Ltd.
 DefaultDirName={autopf}\PCDVisualizer
 DefaultGroupName=PCD Visualizer
@@ -23,22 +26,19 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "Create desktop shortcut"; GroupDescription: "Desktop shortcuts:"
-Name: "quicklaunchicon"; Description: "Create Quick Launch shortcut"; GroupDescription: "Additional shortcuts:"; Flags: unchecked; OnlyBelowVersion: 6.1
 
 [Files]
 ; Main executable
 Source: "..\dist\PCDVisualizer.exe"; DestDir: "{app}"; Flags: ignoreversion
-; Assets (icon)
-Source: "..\assets\visualizer_icon.ico"; DestDir: "{app}\assets"; Flags: ignoreversion
 
 [Icons]
 ; Start Menu shortcuts
-Name: "{group}\PCD Visualizer"; Filename: "{app}\PCDVisualizer.exe"; IconFilename: "{app}\assets\visualizer_icon.ico"
+Name: "{group}\PCD Visualizer"; Filename: "{app}\PCDVisualizer.exe"; IconFilename: "{app}\PCDVisualizer.exe"
 Name: "{group}\{cm:UninstallProgram,PCD Visualizer}"; Filename: "{uninstallexe}"
+
 ; Desktop shortcuts
-Name: "{autodesktop}\PCD Visualizer"; Filename: "{app}\PCDVisualizer.exe"; Tasks: desktopicon; IconFilename: "{app}\assets\visualizer_icon.ico"
-; Quick Launch
-Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\PCD Visualizer"; Filename: "{app}\PCDVisualizer.exe"; Tasks: quicklaunchicon; IconFilename: "{app}\assets\visualizer_icon.ico"
+Name: "{autodesktop}\PCD Visualizer"; Filename: "{app}\PCDVisualizer.exe"; Tasks: desktopicon; IconFilename: "{app}\PCDVisualizer.exe"
+
 [Registry]
 ; File associations for .pcd files
 Root: HKCR; Subkey: ".pcd"; ValueType: string; ValueName: ""; ValueData: "PCDFileVisualizer"; Flags: uninsdeletevalue
@@ -51,13 +51,6 @@ Root: HKCR; Subkey: ".ply"; ValueType: string; ValueName: ""; ValueData: "PLYFil
 Root: HKCR; Subkey: "PLYFileVisualizer"; ValueType: string; ValueName: ""; ValueData: "Polygon File Format"; Flags: uninsdeletekey
 Root: HKCR; Subkey: "PLYFileVisualizer\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\PCDVisualizer.exe,0"
 Root: HKCR; Subkey: "PLYFileVisualizer\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\PCDVisualizer.exe"" ""%1"""
-
-; Application registration for proper uninstall
-Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PCDVisualizer"; ValueType: string; ValueName: "DisplayName"; ValueData: "PCD Visualizer"; Flags: uninsdeletekey
-Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PCDVisualizer"; ValueType: string; ValueName: "DisplayVersion"; ValueData: "1.0"
-Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PCDVisualizer"; ValueType: string; ValueName: "Publisher"; ValueData: "Quantnueral Pvt. Ltd."
-Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PCDVisualizer"; ValueType: string; ValueName: "InstallLocation"; ValueData: "{app}"
-Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PCDVisualizer"; ValueType: string; ValueName: "UninstallString"; ValueData: "{uninstallexe}"
 
 [Run]
 Filename: "{app}\PCDVisualizer.exe"; Description: "{cm:LaunchProgram,PCD Visualizer}"; Flags: nowait postinstall skipifsilent
