@@ -60,6 +60,7 @@ Thumbs.db
 # Project specific
 data/
 logs/
+docs/prompts
 *.pdf
 *.zip
 
