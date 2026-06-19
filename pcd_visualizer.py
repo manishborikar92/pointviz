@@ -104,6 +104,8 @@ class PointCloudProcessor(QThread):
     def run(self):
         try:
             self.progress.emit(10)
+            if self.isInterruptionRequested():
+                return
             
             if self.operation == "load":
                 # Load the full point cloud
@@ -114,11 +116,17 @@ class PointCloudProcessor(QThread):
                 else:
                     raise ValueError(f"Unsupported file format: {file_ext}. Supported formats: .pcd, .ply")
                 
+                if self.isInterruptionRequested():
+                    return
+                
                 if len(pcd.points) == 0:
                     raise ValueError("No points found in the file")
                 
                 original_point_count = len(pcd.points)
                 self.progress.emit(30)
+                
+                if self.isInterruptionRequested():
+                    return
                 
                 # Apply downsampling based on options
                 method = self.load_options.get("method", "none")
@@ -128,6 +136,8 @@ class PointCloudProcessor(QThread):
                 if method == "voxel" and value > 0:
                     processed_pcd = pcd.voxel_down_sample(voxel_size=value)
                 
+                if self.isInterruptionRequested():
+                    return
                 self.progress.emit(60)
 
                 # Perform heavy computations ONLY on the downsampled cloud
@@ -136,11 +146,15 @@ class PointCloudProcessor(QThread):
                         search_param=o3d.geometry.KDTreeSearchParamHybrid(
                             radius=0.1, max_nn=30))
                 
+                if self.isInterruptionRequested():
+                    return
                 self.progress.emit(80)
                 
                 center = processed_pcd.get_center()
                 processed_pcd.translate(-center)
                 
+                if self.isInterruptionRequested():
+                    return
                 self.progress.emit(90)
                 
                 # Emit the processed point cloud and original point count
@@ -292,7 +306,7 @@ class PyVistaWidget(QWidget):
         # Add point cloud to plotter
         render_args = {
             'point_size': self.current_point_size,
-            'render_points_as_spheres': True
+            'render_points_as_spheres': len(points) <= 50000
         }
         
         if 'colors' in pv_cloud.array_names:
@@ -411,15 +425,39 @@ class PyVistaWidget(QWidget):
         return (colors * 255).astype(np.uint8)
     
     def _color_by_curvature(self, points: np.ndarray) -> np.ndarray:
-        """Color by simple curvature estimation"""
-        z_coords = points[:, 2]
-        curvature = np.gradient(np.gradient(z_coords))
-        curv_norm = np.abs(curvature)
-        if curv_norm.max() > 0:
-            curv_norm = (curv_norm - curv_norm.min()) / (curv_norm.max() - curv_norm.min())
-        colormap = plt.colormaps.get_cmap('coolwarm')
-        colors = colormap(curv_norm)[:, :3]
-        return (colors * 255).astype(np.uint8)
+        """Color by proper curvature estimation using local neighborhood covariance"""
+        try:
+            # Estimate covariances if they are not already calculated
+            if not self.current_point_cloud.has_covariances():
+                self.current_point_cloud.estimate_covariances(
+                    search_param=o3d.geometry.KDTreeSearchParamKNN(knn=30)
+                )
+            
+            covs = np.asarray(self.current_point_cloud.covariances)
+            if len(covs) == 0:
+                return np.full((len(points), 3), [128, 128, 255], dtype=np.uint8)
+            
+            # Compute eigenvalues for each covariance matrix (sorted in ascending order: evs[:, 0] is lambda_0)
+            evs = np.linalg.eigvalsh(covs)
+            sum_evs = np.sum(evs, axis=1)
+            
+            curv = np.zeros_like(sum_evs)
+            valid_mask = sum_evs > 1e-8
+            curv[valid_mask] = evs[valid_mask, 0] / sum_evs[valid_mask]
+            
+            # Normalize curvature to [0, 1] range for colormap mapping
+            c_min, c_max = curv.min(), curv.max()
+            if c_max > c_min:
+                curv_norm = (curv - c_min) / (c_max - c_min)
+            else:
+                curv_norm = np.zeros_like(curv)
+                
+            colormap = plt.colormaps.get_cmap('coolwarm')
+            colors = colormap(curv_norm)[:, :3]
+            return (colors * 255).astype(np.uint8)
+        except Exception as e:
+            print(f"Warning: Could not compute curvature: {e}")
+            return np.full((len(points), 3), [128, 128, 255], dtype=np.uint8)
             
     def set_view(self, view_type: str):
         """Set specific camera view"""
@@ -580,7 +618,7 @@ class PCDVisualizer(QMainWindow):
             palette = QApplication.instance().palette()
             bg_color = palette.color(QPalette.ColorRole.Window)
             return bg_color.lightness() < 128
-        except:
+        except Exception:
             return False
         
     def init_ui(self):
@@ -1180,7 +1218,6 @@ Average Magnitude: {avg_magnitude:.6f}"""
         
         # Force update
         self.update()
-        app.processEvents()
     
     def _apply_dark_theme(self, app):
         """Apply dark theme palette"""
@@ -1445,7 +1482,7 @@ Average Magnitude: {avg_magnitude:.6f}"""
                     
             # Clean up thread if running
             if self.processor_thread and self.processor_thread.isRunning():
-                self.processor_thread.quit()
+                self.processor_thread.requestInterruption()
                 self.processor_thread.wait(1000)
                 
         except Exception as e:
@@ -1457,7 +1494,6 @@ Average Magnitude: {avg_magnitude:.6f}"""
 def configure_environment():
     """Configure environment variables for better compatibility"""
     env_vars = {
-        'QT_OPENGL': 'software',
         'PYVISTA_USE_PANEL': '0',
         'PYVISTA_OFF_SCREEN': 'false'
     }
