@@ -41,3 +41,5 @@ COLOR_MODES = {
     'Normal': 'normal',
     'Curvature': 'curvature'
 }
+
+MAX_RECENT_FILES = 10

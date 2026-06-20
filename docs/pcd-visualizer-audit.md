@@ -621,28 +621,37 @@ This reduces 125 lines to ~35 lines.
 
 ---
 
-### Day 4 — Testing Foundation + Features 1 & 2
+### Day 4 — Testing Foundation + Features 1 & 2 [COMPLETED]
 
 **Objectives:** Establish test infrastructure; implement clipping and measurement tools.
 
 **Tasks:**
-1. Set up `pytest` + `pytest-qt` + test directory structure
-2. Write unit tests for `statistics.py` functions
-3. Write unit tests for color mode computations
-4. Write integration test for file loading pipeline (with small fixture `.ply` file)
-5. Implement Feature 3: Recent Files Menu (low complexity, high UX value)
-6. Implement Feature 5: Drag-and-Drop File Loading
+1. **[Completed]** Set up `pytest` + `pytest-qt` + test directory structure
+2. **[Completed]** Write unit tests for `statistics.py` functions
+3. **[Completed]** Write unit tests for color mode computations
+4. **[Completed]** Write integration test for file loading pipeline (with small fixture `.ply` file)
+5. **[Completed]** Implement Feature 3: Recent Files Menu (low complexity, high UX value)
+6. **[Completed]** Implement Feature 5: Drag-and-Drop File Loading
 
-**Deliverables:**
-- Test suite with ≥ 15 tests
-- Recent files feature
-- Drag-and-drop feature
-- Test report
+**Implementation Details:**
+- **Recent Files Menu**: Implemented persistence of the last 10 loaded point cloud paths using `QSettings`. Added the "Open Recent" submenu under the "File" menu in `gui/menus.py` and connected its `aboutToShow` signal to `PCDVisualizer.update_recent_files_menu()`. This dynamically populates the submenu with the actual filenames and absolute path tooltips, filtering out non-existent files automatically.
+- **Drag-and-Drop File Loading**: Enabled drag-and-drop support by calling `self.setAcceptDrops(True)` on the main window. Overrode `dragEnterEvent` and `dropEvent` to validate file extensions (accepting `.pcd` and `.ply` case-insensitively) and trigger loading of the dropped file immediately.
 
-**Success criteria:**
-- All tests pass
-- Recent files persist across app restarts
-- Drag-and-drop works for `.pcd` and `.ply` files
+**Affected Files:**
+- [config.py](config.py)
+- [gui/menus.py](gui/menus.py)
+- [gui/main_window.py](gui/main_window.py)
+- [tests/test_pcd_visualizer.py](tests/test_pcd_visualizer.py)
+
+**Validation Activities & Testing Evidence:**
+- Added 5 new test cases to `tests/test_pcd_visualizer.py` verifying:
+  - `_add_to_recent_files` capacity limiting, duplicate handling, and sorting.
+  - `update_recent_files_menu` behavior under empty states and dynamic populating.
+  - `dragEnterEvent` and `dropEvent` correctness for supported and unsupported file formats.
+- Executed the full test suite (`pytest`), verifying that all 24 tests passed successfully.
+
+**Noteworthy Decisions:**
+- **Dynamic Menu Populating**: Populating the "Open Recent" menu on `aboutToShow` ensures the menu is always up-to-date and avoids having to propagate file-loading events to the menu builder from multiple places.
 
 ---
 

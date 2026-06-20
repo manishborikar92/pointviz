@@ -1,5 +1,6 @@
 import os
 import sys
+from pathlib import Path
 from unittest import mock
 import numpy as np
 import open3d as o3d
@@ -338,3 +339,145 @@ def test_statistics_compute_color_stats():
     assert color_stats["r"]["mean"] == 0.3
     assert color_stats["g"]["mean"] == 0.4
     assert color_stats["b"]["mean"] == 0.5
+
+def test_add_to_recent_files(qapp):
+    with mock.patch('gui.main_window.PCDVisualizer.init_ui'), \
+         mock.patch('gui.main_window.PCDVisualizer.apply_theme'):
+        visualizer = PCDVisualizer()
+        
+        # Mock settings
+        mock_settings = mock.Mock()
+        stored_recent = []
+        def get_val(key, default=None):
+            return stored_recent
+        def set_val(key, val):
+            nonlocal stored_recent
+            stored_recent = val
+        mock_settings.value.side_effect = get_val
+        mock_settings.setValue.side_effect = set_val
+        visualizer.settings = mock_settings
+        
+        path1 = str(Path("test1.pcd").resolve())
+        path2 = str(Path("test2.pcd").resolve())
+        
+        # Test adding a file
+        visualizer._add_to_recent_files("test1.pcd")
+        assert path1 in stored_recent
+        assert stored_recent[0] == path1
+        
+        # Test moving to top and removing duplicates
+        visualizer._add_to_recent_files("test2.pcd")
+        visualizer._add_to_recent_files("test1.pcd")
+        assert len(stored_recent) == 2
+        assert stored_recent[0] == path1
+        
+        # Test max recent limit
+        from config import MAX_RECENT_FILES
+        for i in range(MAX_RECENT_FILES + 5):
+            visualizer._add_to_recent_files(f"limit_{i}.pcd")
+        assert len(stored_recent) == MAX_RECENT_FILES
+        expected_top = str(Path(f"limit_{MAX_RECENT_FILES + 4}.pcd").resolve())
+        assert stored_recent[0] == expected_top
+
+def test_update_recent_files_menu_empty(qapp):
+    with mock.patch('gui.main_window.PCDVisualizer.init_ui'), \
+         mock.patch('gui.main_window.PCDVisualizer.apply_theme'):
+        visualizer = PCDVisualizer()
+        
+        # Mock settings to return empty
+        mock_settings = mock.Mock()
+        mock_settings.value.return_value = []
+        visualizer.settings = mock_settings
+        
+        # Mock QMenu
+        mock_menu = mock.Mock()
+        mock_action = mock.Mock()
+        mock_menu.addAction.return_value = mock_action
+        visualizer.recent_menu = mock_menu
+        
+        visualizer.update_recent_files_menu()
+        
+        mock_menu.clear.assert_called_once()
+        mock_menu.addAction.assert_called_once_with("No Recent Files")
+        mock_action.setEnabled.assert_called_once_with(False)
+
+def test_update_recent_files_menu_with_files(qapp, tmp_path):
+    with mock.patch('gui.main_window.PCDVisualizer.init_ui'), \
+         mock.patch('gui.main_window.PCDVisualizer.apply_theme'):
+        visualizer = PCDVisualizer()
+        
+        # Create temp files that exist
+        f1 = tmp_path / "valid1.pcd"
+        f1.touch()
+        f2 = tmp_path / "valid2.ply"
+        f2.touch()
+        
+        # Mock settings to return these files (and one non-existent file)
+        mock_settings = mock.Mock()
+        mock_settings.value.return_value = [str(f1), "nonexistent.pcd", str(f2)]
+        visualizer.settings = mock_settings
+        
+        # Mock QMenu
+        mock_menu = mock.Mock()
+        visualizer.recent_menu = mock_menu
+        
+        visualizer.update_recent_files_menu()
+        
+        # Verify clear was called, settings were updated to remove nonexistent
+        mock_menu.clear.assert_called_once()
+        mock_settings.setValue.assert_called_once_with("recentFiles", [str(f1.resolve()), str(f2.resolve())])
+        
+        # Verify correct number of actions added
+        assert mock_menu.addAction.call_count == 2
+        mock_menu.addAction.assert_any_call("valid1.pcd")
+        mock_menu.addAction.assert_any_call("valid2.ply")
+
+def test_drag_enter_event(qapp):
+    with mock.patch('gui.main_window.PCDVisualizer.init_ui'), \
+         mock.patch('gui.main_window.PCDVisualizer.apply_theme'):
+        visualizer = PCDVisualizer()
+        
+        # Mock drag event
+        mock_event = mock.Mock()
+        mock_mime = mock.Mock()
+        mock_url1 = mock.Mock()
+        mock_url1.toLocalFile.return_value = "file.pcd"
+        mock_mime.hasUrls.return_value = True
+        mock_mime.urls.return_value = [mock_url1]
+        mock_event.mimeData.return_value = mock_mime
+        
+        # Test PCD
+        visualizer.dragEnterEvent(mock_event)
+        mock_event.acceptProposedAction.assert_called_once()
+        
+        # Test PLY
+        mock_event.reset_mock()
+        mock_url1.toLocalFile.return_value = "file.PLY"
+        visualizer.dragEnterEvent(mock_event)
+        mock_event.acceptProposedAction.assert_called_once()
+        
+        # Test invalid extension
+        mock_event.reset_mock()
+        mock_url1.toLocalFile.return_value = "file.txt"
+        visualizer.dragEnterEvent(mock_event)
+        mock_event.acceptProposedAction.assert_not_called()
+        mock_event.ignore.assert_called_once()
+
+def test_drop_event(qapp):
+    with mock.patch('gui.main_window.PCDVisualizer.init_ui'), \
+         mock.patch('gui.main_window.PCDVisualizer.apply_theme'), \
+         mock.patch('gui.main_window.PCDVisualizer._load_specific_file') as mock_load:
+        visualizer = PCDVisualizer()
+        
+        # Mock drop event
+        mock_event = mock.Mock()
+        mock_mime = mock.Mock()
+        mock_url = mock.Mock()
+        mock_url.toLocalFile.return_value = "dropped_file.pcd"
+        mock_mime.urls.return_value = [mock_url]
+        mock_event.mimeData.return_value = mock_mime
+        
+        visualizer.dropEvent(mock_event)
+        
+        mock_load.assert_called_once_with("dropped_file.pcd")
+        mock_event.acceptProposedAction.assert_called_once()

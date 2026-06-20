@@ -19,9 +19,21 @@ def setup_menus(window):
 
 def _add_file_menu_actions(window, file_menu):
     """Add actions to file menu."""
+    # Open action
+    open_action = QAction("Open Point Cloud File", window)
+    open_action.setShortcut("Ctrl+O")
+    open_action.triggered.connect(window.load_file)
+    file_menu.addAction(open_action)
+    
+    # Open Recent submenu
+    window.recent_menu = QMenu("Open Recent", file_menu)
+    file_menu.addMenu(window.recent_menu)
+    window.recent_menu.aboutToShow.connect(window.update_recent_files_menu)
+    
+    file_menu.addSeparator()
+    
+    # Other file actions
     actions = [
-        ("Open Point Cloud File", "Ctrl+O", window.load_file),
-        None,  # Separator
         ("Export Point Cloud...", "Ctrl+E", window.export_file),
         None,  # Separator
         ("Take Screenshot...", "Ctrl+S", window.take_screenshot),

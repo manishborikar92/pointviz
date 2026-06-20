@@ -7,11 +7,11 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QHBoxLayout, QSplitter,
                              QStatusBar, QMessageBox, QFileDialog, QProgressDialog,
                              QApplication)
 from PyQt6.QtCore import Qt, QTimer, QSettings, pyqtSlot
-from PyQt6.QtGui import QIcon, QPalette, QColor
+from PyQt6.QtGui import QAction, QIcon, QPalette, QColor
 
 import open3d as o3d
 
-from config import LARGE_FILE_THRESHOLD_MB, ICON_PATH, APP_NAME
+from config import LARGE_FILE_THRESHOLD_MB, ICON_PATH, APP_NAME, MAX_RECENT_FILES
 from logger import logger
 from core.point_cloud_processor import PointCloudProcessor
 import core.statistics as statistics
@@ -57,6 +57,7 @@ class PCDVisualizer(QMainWindow):
         """Initialize the user interface."""
         self.setWindowTitle(APP_NAME)
         self.setWindowIcon(QIcon(str(ICON_PATH)))
+        self.setAcceptDrops(True)
         self.resize(1000, 700)
         self._center_window()
         
@@ -294,6 +295,10 @@ class PCDVisualizer(QMainWindow):
         self.point_cloud = point_cloud
         self.original_point_count = original_point_count
         
+        # Add to recent files if loaded from a file
+        if self.processor_thread and hasattr(self.processor_thread, 'file_path') and self.processor_thread.file_path:
+            self._add_to_recent_files(self.processor_thread.file_path)
+        
         # Update UI
         displayed_count = len(point_cloud.points)
         if displayed_count < original_point_count:
@@ -466,6 +471,92 @@ Average Magnitude: {avg_magnitude:.6f}"""
         dialog = AboutDialog(self.is_dark_mode, self)
         dialog.exec()
     
+    # Drag and Drop Events
+    def dragEnterEvent(self, event):
+        """Accept drag enter event if it contains point cloud files."""
+        if event.mimeData().hasUrls():
+            for url in event.mimeData().urls():
+                file_path = url.toLocalFile()
+                if file_path.lower().endswith(('.pcd', '.ply')):
+                    event.acceptProposedAction()
+                    return
+        event.ignore()
+
+    def dropEvent(self, event):
+        """Handle dropped files by loading the first valid point cloud file."""
+        for url in event.mimeData().urls():
+            file_path = url.toLocalFile()
+            if file_path.lower().endswith(('.pcd', '.ply')):
+                logger.info(f"File dropped: {file_path}")
+                self._load_specific_file(file_path)
+                break
+        event.acceptProposedAction()
+
+    # Recent Files Menu management
+    def _add_to_recent_files(self, file_path: str):
+        """Add a file path to the recent files list and persist it."""
+        if not file_path:
+            return
+            
+        try:
+            resolved_path = str(Path(file_path).resolve())
+        except Exception:
+            resolved_path = str(file_path)
+            
+        recent_files = self.settings.value("recentFiles", [])
+        if not isinstance(recent_files, list):
+            recent_files = []
+            
+        # Remove if already exists to move to top
+        if resolved_path in recent_files:
+            recent_files.remove(resolved_path)
+            
+        # Insert at the beginning
+        recent_files.insert(0, resolved_path)
+        
+        # Limit count
+        recent_files = recent_files[:MAX_RECENT_FILES]
+        
+        self.settings.setValue("recentFiles", recent_files)
+
+    def update_recent_files_menu(self):
+        """Rebuild the recent files menu dynamically."""
+        if not hasattr(self, 'recent_menu') or self.recent_menu is None:
+            return
+            
+        self.recent_menu.clear()
+        
+        recent_files = self.settings.value("recentFiles", [])
+        if not isinstance(recent_files, list):
+            recent_files = []
+            
+        # Filter out files that no longer exist
+        valid_recent = []
+        for f in recent_files:
+            try:
+                if Path(f).exists():
+                    valid_recent.append(str(Path(f).resolve()))
+            except Exception:
+                pass
+                
+        if len(valid_recent) != len(recent_files):
+            self.settings.setValue("recentFiles", valid_recent)
+            recent_files = valid_recent
+            
+        if not recent_files:
+            no_recent_action = self.recent_menu.addAction("No Recent Files")
+            no_recent_action.setEnabled(False)
+            return
+            
+        # Add actions for each file path
+        for path in recent_files:
+            action_text = Path(path).name
+            action = self.recent_menu.addAction(action_text)
+            action.setToolTip(path)
+            action.setStatusTip(f"Open recent file: {path}")
+            # Bind the click to _load_specific_file
+            action.triggered.connect(lambda checked=False, p=path: self._load_specific_file(p))
+            
     def closeEvent(self, event):
         """Handle application closing with proper cleanup."""
         logger.info("Application closing event triggered.")
