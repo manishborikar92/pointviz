@@ -59,10 +59,8 @@ class VisualizationPanel(QWidget):
             label = QLabel("No data available")
             label.setFont(QFont("Courier", 9))
             
-            # Set the reference on both this panel and the main window for backward compatibility
+            # Set the reference on this panel
             setattr(self, label_attr, label)
-            if self.main_window is not None:
-                setattr(self.main_window, label_attr, label)
             
             group_layout.addWidget(label)
             group.setLayout(group_layout)
@@ -75,3 +73,26 @@ class VisualizationPanel(QWidget):
         layout.addWidget(scroll_area)
         widget.setLayout(layout)
         return widget
+
+    # --- Public Panel API ---
+    def update_statistics(self, basic: str, geo: str, features: str, additional: str):
+        """Update statistics label texts."""
+        if hasattr(self, 'basic_stats_label'):
+            self.basic_stats_label.setText(basic)
+        if hasattr(self, 'geo_stats_label'):
+            self.geo_stats_label.setText(geo)
+        if hasattr(self, 'features_stats_label'):
+            self.features_stats_label.setText(features)
+        if hasattr(self, 'additional_stats_label'):
+            self.additional_stats_label.setText(additional)
+
+    def clear_statistics(self):
+        """Reset statistics labels to default unloaded values."""
+        if hasattr(self, 'basic_stats_label'):
+            self.basic_stats_label.setText("No point cloud loaded")
+        if hasattr(self, 'geo_stats_label'):
+            self.geo_stats_label.setText("No data available")
+        if hasattr(self, 'features_stats_label'):
+            self.features_stats_label.setText("No data available")
+        if hasattr(self, 'additional_stats_label'):
+            self.additional_stats_label.setText("No data available")

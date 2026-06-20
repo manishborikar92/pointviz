@@ -237,25 +237,21 @@ def test_adaptive_point_size(qapp):
          mock.patch('gui.pyvista_widget.PyVistaWidget.update_point_cloud'):
         
         visualizer = PCDVisualizer()
-        visualizer.file_label = mock.Mock()
+        visualizer.control_panel = mock.Mock()
         visualizer.status_bar = mock.Mock()
-        visualizer.point_size_slider = mock.Mock()
-        visualizer.point_size_label = mock.Mock()
-        visualizer.color_mode_combo = mock.Mock()
-        visualizer.normals_checkbox = mock.Mock()
         visualizer.pyvista_widget = mock.Mock()
         
         # Case 1: Small point cloud (<5000 points)
         pcd1 = o3d.geometry.PointCloud()
         pcd1.points = o3d.utility.Vector3dVector(np.random.rand(100, 3))
         visualizer._on_point_cloud_loaded(pcd1, 100)
-        visualizer.point_size_slider.setValue.assert_called_with(5)
+        visualizer.control_panel.set_point_size_value.assert_called_with(5)
         
         # Case 2: Medium-large point cloud (>100,000 points)
         pcd2 = o3d.geometry.PointCloud()
         pcd2.points = o3d.utility.Vector3dVector(np.random.rand(120000, 3))
         visualizer._on_point_cloud_loaded(pcd2, 120000)
-        visualizer.point_size_slider.setValue.assert_called_with(1)
+        visualizer.control_panel.set_point_size_value.assert_called_with(1)
 
 def test_background_export(qapp):
     # Verify background threaded export initiates correctly
@@ -481,3 +477,82 @@ def test_drop_event(qapp):
         
         mock_load.assert_called_once_with("dropped_file.pcd")
         mock_event.acceptProposedAction.assert_called_once()
+
+def test_on_point_cloud_loaded_updates_title_and_label(qapp):
+    with mock.patch('gui.main_window.PCDVisualizer.init_ui'), \
+         mock.patch('gui.main_window.PCDVisualizer.apply_theme'), \
+         mock.patch('gui.main_window.PCDVisualizer._update_statistics'), \
+         mock.patch('gui.pyvista_widget.PyVistaWidget.update_point_cloud'), \
+         mock.patch('gui.main_window.PCDVisualizer.setWindowTitle') as mock_set_title:
+        
+        visualizer = PCDVisualizer()
+        visualizer.control_panel = mock.Mock()
+        visualizer.status_bar = mock.Mock()
+        visualizer.pyvista_widget = mock.Mock()
+        
+        # Setup mock thread
+        mock_thread = mock.Mock()
+        mock_thread.file_path = str(Path("some_directory/test_cloud.pcd"))
+        visualizer.processor_thread = mock_thread
+        
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(np.random.rand(10, 3))
+        
+        visualizer._on_point_cloud_loaded(pcd, 10)
+        
+        mock_set_title.assert_called_once_with("test_cloud.pcd - PCD Visualizer")
+        visualizer.control_panel.update_file_info.assert_called_once_with(
+            file_path=str(Path("some_directory/test_cloud.pcd")),
+            displayed_points=10,
+            original_points=10
+        )
+
+def test_load_concurrency_guard(qapp):
+    with mock.patch('gui.main_window.PCDVisualizer.init_ui'), \
+         mock.patch('gui.main_window.PCDVisualizer.apply_theme'), \
+         mock.patch('PyQt6.QtWidgets.QMessageBox.warning') as mock_warning:
+        
+        visualizer = PCDVisualizer()
+        
+        # Setup running thread
+        mock_thread = mock.Mock()
+        mock_thread.isRunning.return_value = True
+        visualizer.processor_thread = mock_thread
+        
+        # Attempt to load a file
+        visualizer._load_specific_file("nonexistent.pcd")
+        
+        # Warning should be displayed
+        mock_warning.assert_called_once()
+        assert "is already loading" in mock_warning.call_args[0][2]
+
+def test_export_concurrency_guard(qapp):
+    with mock.patch('gui.main_window.PCDVisualizer.init_ui'), \
+         mock.patch('gui.main_window.PCDVisualizer.apply_theme'), \
+         mock.patch('PyQt6.QtWidgets.QMessageBox.warning') as mock_warning:
+        
+        visualizer = PCDVisualizer()
+        visualizer.point_cloud = mock.Mock()
+        
+        # Setup running export thread
+        mock_export_thread = mock.Mock()
+        mock_export_thread.isRunning.return_value = True
+        visualizer.export_thread = mock_export_thread
+        
+        visualizer.export_file()
+        
+        mock_warning.assert_called_once()
+        assert "export is already in progress" in mock_warning.call_args[0][2]
+
+def test_invalid_file_removes_from_recent(qapp):
+    with mock.patch('gui.main_window.PCDVisualizer.init_ui'), \
+         mock.patch('gui.main_window.PCDVisualizer.apply_theme'), \
+         mock.patch('gui.main_window.PCDVisualizer._remove_from_recent_files') as mock_remove, \
+         mock.patch('PyQt6.QtWidgets.QMessageBox.warning'):
+        
+        visualizer = PCDVisualizer()
+        
+        # Try loading non-existent file
+        visualizer._load_specific_file("completely_missing.pcd")
+        
+        mock_remove.assert_called_once_with("completely_missing.pcd")

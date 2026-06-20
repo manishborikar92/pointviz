@@ -632,26 +632,36 @@ This reduces 125 lines to ~35 lines.
 4. **[Completed]** Write integration test for file loading pipeline (with small fixture `.ply` file)
 5. **[Completed]** Implement Feature 3: Recent Files Menu (low complexity, high UX value)
 6. **[Completed]** Implement Feature 5: Drag-and-Drop File Loading
+7. **[Completed]** Implement Open File Display (Window Title & Info Label)
+8. **[Completed]** Remediate Thread Concurrency & UI Encapsulation
 
 **Implementation Details:**
 - **Recent Files Menu**: Implemented persistence of the last 10 loaded point cloud paths using `QSettings`. Added the "Open Recent" submenu under the "File" menu in `gui/menus.py` and connected its `aboutToShow` signal to `PCDVisualizer.update_recent_files_menu()`. This dynamically populates the submenu with the actual filenames and absolute path tooltips, filtering out non-existent files automatically.
 - **Drag-and-Drop File Loading**: Enabled drag-and-drop support by calling `self.setAcceptDrops(True)` on the main window. Overrode `dragEnterEvent` and `dropEvent` to validate file extensions (accepting `.pcd` and `.ply` case-insensitively) and trigger loading of the dropped file immediately.
+- **Open File Display**: Updated the window title dynamically upon file load to display `[filename] - PCD Visualizer`. Added a bold file name label in the File Information panel of the Control Panel to show the active filename, along with a hover tooltip displaying its absolute path.
+- **UI Encapsulation & Panel APIs**: Removed direct widget aliases from `MainWindow` and direct `setattr` stats label injection from `VisualizationPanel`. Added clean, public APIs on `ControlPanel` (`update_file_info`, `set_controls_enabled`, `set_point_size_value`) and `VisualizationPanel` (`update_statistics`, `clear_statistics`) to enforce proper Model-View separation of concerns.
+- **Concurrency Guards**: Added checks inside `_load_specific_file` and `export_file` to verify if thread operations are already active (`self.processor_thread.isRunning()`), preventing orphaned threads and signal race conditions.
 
 **Affected Files:**
 - [config.py](config.py)
 - [gui/menus.py](gui/menus.py)
+- [gui/control_panel.py](gui/control_panel.py)
+- [gui/visualization_panel.py](gui/visualization_panel.py)
 - [gui/main_window.py](gui/main_window.py)
 - [tests/test_pcd_visualizer.py](tests/test_pcd_visualizer.py)
 
 **Validation Activities & Testing Evidence:**
-- Added 5 new test cases to `tests/test_pcd_visualizer.py` verifying:
+- Added 9 new test cases to `tests/test_pcd_visualizer.py` verifying:
   - `_add_to_recent_files` capacity limiting, duplicate handling, and sorting.
   - `update_recent_files_menu` behavior under empty states and dynamic populating.
   - `dragEnterEvent` and `dropEvent` correctness for supported and unsupported file formats.
-- Executed the full test suite (`pytest`), verifying that all 24 tests passed successfully.
+  - `test_on_point_cloud_loaded_updates_title_and_label`: Validates proper window title and file label updates.
+  - `test_load_concurrency_guard` and `test_export_concurrency_guard`: Assures active threads block concurrent load/export requests.
+  - `test_invalid_file_removes_from_recent`: Assures missing files are pruned from recent history.
+- Executed the full test suite (`pytest`), verifying that all 28 tests passed successfully.
 
 **Noteworthy Decisions:**
-- **Dynamic Menu Populating**: Populating the "Open Recent" menu on `aboutToShow` ensures the menu is always up-to-date and avoids having to propagate file-loading events to the menu builder from multiple places.
+- **Encapsulated Signal Propagation**: Leveraged PyQt's native signal parameters to pass values (e.g. `_on_point_size_changed(self, size: int)`) directly from the panel widgets to the controller without direct widget references, significantly improving decouplability and testability.
 
 ---
 

@@ -72,15 +72,8 @@ class PCDVisualizer(QMainWindow):
         self.control_panel = ControlPanel(self)
         self.visualization_panel = VisualizationPanel(self)
         
-        # Alias panel properties directly on MainWindow for backward compatibility
+        # Reference rendering widget
         self.pyvista_widget = self.visualization_panel.pyvista_widget
-        self.file_label = self.control_panel.file_label
-        self.progress_bar = self.control_panel.progress_bar
-        self.point_size_slider = self.control_panel.point_size_slider
-        self.point_size_label = self.control_panel.point_size_label
-        self.color_mode_combo = self.control_panel.color_mode_combo
-        self.background_combo = self.control_panel.background_combo
-        self.normals_checkbox = self.control_panel.normals_checkbox
         
         # Add panels to splitter
         main_splitter.addWidget(self.control_panel)
@@ -112,11 +105,8 @@ class PCDVisualizer(QMainWindow):
         self.status_bar.showMessage("Ready - Load a point cloud file to begin")
         
     # Event handlers
-    def _on_point_size_changed(self):
+    def _on_point_size_changed(self, size: int):
         """Handle point size slider changes."""
-        size = self.point_size_slider.value()
-        self.point_size_label.setText(str(size))
-        
         if self.point_cloud:
             self.pyvista_widget.update_point_size(size)
         
@@ -124,21 +114,21 @@ class PCDVisualizer(QMainWindow):
         """Handle color mode changes."""
         if self.point_cloud:
             had_normals = self.point_cloud.has_normals()
-            color_mode = self.color_mode_combo.currentText()
+            color_mode = self.control_panel.get_color_mode()
             self.pyvista_widget.update_color_mode(color_mode)
             if not had_normals and self.point_cloud.has_normals():
                 self._update_statistics()
         
     def _on_background_changed(self):
         """Handle background changes."""
-        bg_type = self.background_combo.currentText()
+        bg_type = self.control_panel.get_background()
         self.pyvista_widget.update_background(bg_type)
         
     def _on_normals_toggled(self):
         """Handle normals toggle."""
         if self.point_cloud:
             had_normals = self.point_cloud.has_normals()
-            show = self.normals_checkbox.isChecked()
+            show = self.control_panel.is_normals_checked()
             self.pyvista_widget.toggle_normals_display(show)
             if not had_normals and self.point_cloud.has_normals():
                 self._update_statistics()
@@ -183,9 +173,15 @@ class PCDVisualizer(QMainWindow):
     
     def _load_specific_file(self, file_path: str):
         """Load a specific file path with downsampling options for large files."""
+        # Concurrency Guard (Load)
+        if self.processor_thread and self.processor_thread.isRunning():
+            QMessageBox.warning(self, "Warning", "A point cloud file is already loading. Please wait.")
+            return
+
         p_file = Path(file_path)
         if not p_file.exists():
             QMessageBox.warning(self, "File Not Found", f"File does not exist: {file_path}")
+            self._remove_from_recent_files(file_path)
             return
 
         file_size_mb = p_file.stat().st_size / (1024 * 1024)
@@ -199,9 +195,10 @@ class PCDVisualizer(QMainWindow):
                 return
             load_options = options
             
-        self.file_label.setText(f"Loading: {p_file.name}")
-        self.progress_bar.setVisible(True)
-        self.progress_bar.setValue(0)
+        self.control_panel.update_file_info(file_path=str(p_file.resolve()))
+        self.control_panel.file_label.setText(f"Loading: {p_file.name}")
+        self.control_panel.set_progress_visible(True)
+        self.control_panel.set_progress_value(0)
         self.status_bar.showMessage("Loading point cloud...")
         
         # Disable UI during loading
@@ -209,7 +206,7 @@ class PCDVisualizer(QMainWindow):
         
         # Start processing thread with load options
         self.processor_thread = PointCloudProcessor(file_path, load_options)
-        self.processor_thread.progress.connect(self.progress_bar.setValue)
+        self.processor_thread.progress.connect(self.control_panel.set_progress_value)
         self.processor_thread.error.connect(self._show_error)
         self.processor_thread.loaded.connect(self._on_point_cloud_loaded)
         self.processor_thread.finished.connect(self._on_processing_finished)
@@ -219,6 +216,11 @@ class PCDVisualizer(QMainWindow):
         """Export point cloud to file in a background thread."""
         if not self.point_cloud:
             QMessageBox.warning(self, "Warning", "No point cloud loaded")
+            return
+            
+        # Concurrency Guard (Export)
+        if hasattr(self, 'export_thread') and self.export_thread and self.export_thread.isRunning():
+            QMessageBox.warning(self, "Warning", "A point cloud export is already in progress. Please wait.")
             return
             
         file_path, _ = QFileDialog.getSaveFileName(
@@ -298,15 +300,18 @@ class PCDVisualizer(QMainWindow):
         # Add to recent files if loaded from a file
         if self.processor_thread and hasattr(self.processor_thread, 'file_path') and self.processor_thread.file_path:
             self._add_to_recent_files(self.processor_thread.file_path)
-        
-        # Update UI
-        displayed_count = len(point_cloud.points)
-        if displayed_count < original_point_count:
-            self.file_label.setText(f"Loaded: {displayed_count:,} points\n"
-                                    f"(Downsampled from {original_point_count:,})")
-        else:
-            self.file_label.setText(f"Loaded: {displayed_count:,} points")
             
+            # Update Window Title and Control Panel File Info
+            file_path = Path(self.processor_thread.file_path)
+            self.setWindowTitle(f"{file_path.name} - {APP_NAME}")
+            displayed_count = len(point_cloud.points)
+            self.control_panel.update_file_info(
+                file_path=str(file_path),
+                displayed_points=displayed_count,
+                original_points=original_point_count
+            )
+        
+        displayed_count = len(point_cloud.points)
         # Determine adaptive point size based on count
         if displayed_count < 5000:
             suggested_size = 5
@@ -317,8 +322,7 @@ class PCDVisualizer(QMainWindow):
         else:
             suggested_size = 1
             
-        self.point_size_slider.setValue(suggested_size)
-        self.point_size_label.setText(str(suggested_size))
+        self.control_panel.set_point_size_value(suggested_size)
         
         # Update statistics and visualization
         self._update_statistics()
@@ -330,8 +334,12 @@ class PCDVisualizer(QMainWindow):
         
     def _on_processing_finished(self):
         """Handle processing completion."""
-        self.progress_bar.setVisible(False)
+        self.control_panel.set_progress_visible(False)
         self.setEnabled(True)
+        # Clean up thread
+        if self.processor_thread:
+            self.processor_thread.deleteLater()
+            self.processor_thread = None
         
     def _show_error(self, message: str):
         """Show error message."""
@@ -340,13 +348,7 @@ class PCDVisualizer(QMainWindow):
         
     def _enable_point_cloud_controls(self, enabled: bool):
         """Enable/disable controls that require a loaded point cloud."""
-        controls = [
-            self.point_size_slider,
-            self.color_mode_combo,
-            self.normals_checkbox
-        ]
-        for control in controls:
-            control.setEnabled(enabled)
+        self.control_panel.set_controls_enabled(enabled)
     
     # Statistics and calculations
     def _update_statistics(self):
@@ -357,40 +359,35 @@ class PCDVisualizer(QMainWindow):
             
         points = np.asarray(self.point_cloud.points)
         
-        self._update_basic_stats(points)
-        self._update_geometric_stats(points)
-        self._update_features_stats()
-        self._update_additional_stats(points)
+        # Format strings for stats
+        basic_info = self._get_basic_stats_text(points)
+        geo_info = self._get_geometric_stats_text(points)
+        features_info = self._get_features_stats_text()
+        additional_info = self._get_additional_stats_text(points)
+        
+        # Update via panel public API
+        self.visualization_panel.update_statistics(basic_info, geo_info, features_info, additional_info)
     
     def _clear_statistics(self):
         """Clear all statistics displays."""
-        labels = [
-            self.basic_stats_label,
-            self.geo_stats_label, 
-            self.features_stats_label,
-            self.additional_stats_label
-        ]
-        for label in labels:
-            label.setText("No point cloud loaded" if label == self.basic_stats_label else "No data available")
-    
-    def _update_basic_stats(self, points: np.ndarray):
-        """Update basic statistics with original and displayed counts."""
-        displayed_count = len(points)
+        self.visualization_panel.clear_statistics()
+        self.control_panel.update_file_info(None)
+        self.setWindowTitle(APP_NAME)
         
-        basic_info = f"""Displayed Points: {displayed_count:,}
+    def _get_basic_stats_text(self, points: np.ndarray) -> str:
+        displayed_count = len(points)
+        return f"""Displayed Points: {displayed_count:,}
 Original Points:  {self.original_point_count:,}
 Dimensions: {points.shape}
 Memory (Displayed): {points.nbytes / 1024 / 1024:.2f} MB"""
-        self.basic_stats_label.setText(basic_info)
-    
-    def _update_geometric_stats(self, points: np.ndarray):
-        """Update geometric statistics."""
+
+    def _get_geometric_stats_text(self, points: np.ndarray) -> str:
         centroid = statistics.compute_centroid(points)
         volume = statistics.calculate_volume(points)
         density = statistics.calculate_density(points, volume)
         ranges = statistics.compute_ranges(points)
         
-        geo_info = f"""Centroid: ({centroid[0]:.3f}, {centroid[1]:.3f}, {centroid[2]:.3f})
+        return f"""Centroid: ({centroid[0]:.3f}, {centroid[1]:.3f}, {centroid[2]:.3f})
 Bounding Box Volume: {volume:.6f} units³
 Point Density: {density:.2f} points/unit³
 
@@ -398,15 +395,12 @@ Coordinate Ranges:
 X: {ranges['x'][0]:.3f} to {ranges['x'][1]:.3f}
 Y: {ranges['y'][0]:.3f} to {ranges['y'][1]:.3f}
 Z: {ranges['z'][0]:.3f} to {ranges['z'][1]:.3f}"""
-        self.geo_stats_label.setText(geo_info)
-    
-    def _update_features_stats(self):
-        """Update features statistics."""
+
+    def _get_features_stats_text(self) -> str:
         features_info = f"""Has Colors: {'Yes' if self.point_cloud.has_colors() else 'No'}
 Has Normals: {'Yes' if self.point_cloud.has_normals() else 'No'}
 Has Covariances: {'Yes' if self.point_cloud.has_covariances() else 'No'}"""
         
-        # Add color statistics if available
         if self.point_cloud.has_colors():
             colors = np.asarray(self.point_cloud.colors)
             color_stats = statistics.compute_color_stats(colors)
@@ -417,10 +411,9 @@ R: {color_stats['r']['mean']:.3f} ± {color_stats['r']['std']:.3f}
 G: {color_stats['g']['mean']:.3f} ± {color_stats['g']['std']:.3f}
 B: {color_stats['b']['mean']:.3f} ± {color_stats['b']['std']:.3f}"""
         
-        self.features_stats_label.setText(features_info)
-    
-    def _update_additional_stats(self, points: np.ndarray):
-        """Update additional statistics."""
+        return features_info
+
+    def _get_additional_stats_text(self, points: np.ndarray) -> str:
         centroid = statistics.compute_centroid(points)
         dist_stats = statistics.compute_distance_stats(points, centroid)
         coord_stats = statistics.compute_coordinate_stats(points)
@@ -436,7 +429,6 @@ X: μ={coord_stats['x']['mean']:.6f}, σ={coord_stats['x']['std']:.6f}
 Y: μ={coord_stats['y']['mean']:.6f}, σ={coord_stats['y']['std']:.6f}
 Z: μ={coord_stats['z']['mean']:.6f}, σ={coord_stats['z']['std']:.6f}"""
         
-        # Add normal statistics if available
         if self.point_cloud.has_normals():
             normals = np.asarray(self.point_cloud.normals)
             avg_magnitude = np.linalg.norm(normals, axis=1).mean()
@@ -446,7 +438,7 @@ Normal Vectors:
 Count: {len(normals):,}
 Average Magnitude: {avg_magnitude:.6f}"""
         
-        self.additional_stats_label.setText(additional_info)
+        return additional_info
     
     # Theme management
     def toggle_theme(self):
@@ -519,6 +511,23 @@ Average Magnitude: {avg_magnitude:.6f}"""
         
         self.settings.setValue("recentFiles", recent_files)
 
+    def _remove_from_recent_files(self, file_path: str):
+        """Remove a file path from the recent files list."""
+        if not file_path:
+            return
+        try:
+            resolved_path = str(Path(file_path).resolve())
+        except Exception:
+            resolved_path = str(file_path)
+            
+        recent_files = self.settings.value("recentFiles", [])
+        if not isinstance(recent_files, list):
+            recent_files = []
+            
+        if resolved_path in recent_files:
+            recent_files.remove(resolved_path)
+            self.settings.setValue("recentFiles", recent_files)
+
     def update_recent_files_menu(self):
         """Rebuild the recent files menu dynamically."""
         if not hasattr(self, 'recent_menu') or self.recent_menu is None:
@@ -562,7 +571,7 @@ Average Magnitude: {avg_magnitude:.6f}"""
         logger.info("Application closing event triggered.")
         try:
             # Clean up PyVista widget
-            if hasattr(self, 'pyvista_widget') and self.pyvista_widget.plotter:
+            if hasattr(self, 'pyvista_widget') and self.pyvista_widget:
                 self.pyvista_widget.cleanup()
                     
             # Clean up thread if running
