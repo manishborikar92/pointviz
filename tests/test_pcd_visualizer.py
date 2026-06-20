@@ -4,6 +4,7 @@ from unittest import mock
 import numpy as np
 import open3d as o3d
 import pytest
+import pyvista as pv
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QPalette, QColor
 
@@ -135,3 +136,139 @@ def test_conditional_sphere_rendering(qapp):
         widget.render_point_cloud()
         args, kwargs = widget.plotter.add_mesh.call_args
         assert kwargs['render_points_as_spheres'] is False
+
+def test_deferred_normals_loading():
+    # Verify that PointCloudProcessor does not estimate normals on load
+    processor = PointCloudProcessor("dummy.pcd", {"method": "none", "value": None})
+    pcd = o3d.geometry.PointCloud()
+    pts = np.random.rand(10, 3)
+    pcd.points = o3d.utility.Vector3dVector(pts)
+    
+    with mock.patch('open3d.io.read_point_cloud', return_value=pcd) as mock_read, \
+         mock.patch('open3d.geometry.PointCloud.estimate_normals') as mock_estimate:
+        
+        processor.run()
+        
+        mock_read.assert_called_once()
+        mock_estimate.assert_not_called()
+
+def test_on_demand_normals_estimation(qapp):
+    # Verify that normals are estimated on-demand when requested
+    with mock.patch('pcd_visualizer.PyVistaWidget.setup_visualization'):
+        widget = PyVistaWidget()
+        pcd = o3d.geometry.PointCloud()
+        pts = np.random.rand(10, 3)
+        pcd.points = o3d.utility.Vector3dVector(pts)
+        widget.current_point_cloud = pcd
+        
+        assert not pcd.has_normals()
+        
+        # Trigger normal color mode, which should trigger on-demand normal estimation
+        colors = widget._color_by_normal()
+        
+        assert pcd.has_normals()
+        assert colors.shape == (10, 3)
+
+def test_color_cache(qapp):
+    # Verify color cache lookup, storage, and invalidation
+    with mock.patch('pcd_visualizer.PyVistaWidget.setup_visualization'):
+        widget = PyVistaWidget()
+        pcd = o3d.geometry.PointCloud()
+        pts = np.random.rand(10, 3)
+        pcd.points = o3d.utility.Vector3dVector(pts)
+        widget.current_point_cloud = pcd
+        
+        # Initial state: cache is empty
+        assert len(widget.color_cache) == 0
+        
+        # Color by height
+        widget.current_color_mode = "Height"
+        colors_1 = widget._apply_color_mode(pts)
+        
+        assert "Height" in widget.color_cache
+        assert np.array_equal(widget.color_cache["Height"], colors_1)
+        
+        # Call it again; should return cached version
+        colors_2 = widget._apply_color_mode(pts)
+        assert colors_2 is colors_1
+        
+        # Change point cloud; cache should be cleared
+        pcd2 = o3d.geometry.PointCloud()
+        pcd2.points = o3d.utility.Vector3dVector(np.random.rand(10, 3))
+        
+        widget.update_point_cloud(pcd2)
+        assert len(widget.color_cache) == 0
+
+def test_inplace_scalar_update(qapp):
+    # Verify in-place scalar updates in update_color_mode
+    with mock.patch('pcd_visualizer.PyVistaWidget.setup_visualization'):
+        widget = PyVistaWidget()
+        widget.plotter = mock.Mock()
+        widget.point_cloud_actor = mock.Mock()
+        
+        pcd = o3d.geometry.PointCloud()
+        pts = np.random.rand(10, 3)
+        pcd.points = o3d.utility.Vector3dVector(pts)
+        widget.current_point_cloud = pcd
+        
+        # Simulate pv_cloud reference
+        widget.pv_cloud = pv.PolyData(pts)
+        
+        # Initial color mode
+        widget.current_color_mode = "Original"
+        
+        # Change color mode
+        widget.update_color_mode("Height")
+        
+        # Check that plotter.render was called (meaning in-place update occurred)
+        widget.plotter.render.assert_called_once()
+        assert "colors" in widget.pv_cloud.point_data
+
+def test_adaptive_point_size(qapp):
+    # Verify adaptive point size selection on load
+    with mock.patch('pcd_visualizer.PCDVisualizer.init_ui'), \
+         mock.patch('pcd_visualizer.PCDVisualizer.apply_theme'), \
+         mock.patch('pcd_visualizer.PCDVisualizer._update_statistics'), \
+         mock.patch('pcd_visualizer.PyVistaWidget.update_point_cloud'):
+        
+        visualizer = PCDVisualizer()
+        visualizer.file_label = mock.Mock()
+        visualizer.status_bar = mock.Mock()
+        visualizer.point_size_slider = mock.Mock()
+        visualizer.point_size_label = mock.Mock()
+        visualizer.color_mode_combo = mock.Mock()
+        visualizer.normals_checkbox = mock.Mock()
+        visualizer.pyvista_widget = mock.Mock()
+        
+        # Case 1: Small point cloud (<5000 points)
+        pcd1 = o3d.geometry.PointCloud()
+        pcd1.points = o3d.utility.Vector3dVector(np.random.rand(100, 3))
+        visualizer._on_point_cloud_loaded(pcd1, 100)
+        visualizer.point_size_slider.setValue.assert_called_with(5)
+        
+        # Case 2: Medium-large point cloud (>100,000 points)
+        pcd2 = o3d.geometry.PointCloud()
+        pcd2.points = o3d.utility.Vector3dVector(np.random.rand(120000, 3))
+        visualizer._on_point_cloud_loaded(pcd2, 120000)
+        visualizer.point_size_slider.setValue.assert_called_with(1)
+
+def test_background_export(qapp):
+    # Verify background threaded export initiates correctly
+    with mock.patch('pcd_visualizer.PCDVisualizer.init_ui'), \
+         mock.patch('pcd_visualizer.PCDVisualizer.apply_theme'), \
+         mock.patch('PyQt6.QtWidgets.QFileDialog.getSaveFileName', return_value=("test_export.pcd", "PCD Files (*.pcd)")):
+        
+        visualizer = PCDVisualizer()
+        visualizer.point_cloud = o3d.geometry.PointCloud()
+        visualizer.point_cloud.points = o3d.utility.Vector3dVector(np.random.rand(10, 3))
+        
+        with mock.patch.object(PointCloudProcessor, 'start') as mock_start:
+            visualizer.export_file()
+            
+            assert visualizer.export_thread is not None
+            assert visualizer.export_thread.operation == "export"
+            assert visualizer.export_thread.file_path == "test_export.pcd"
+            mock_start.assert_called_once()
+            
+            # Clean up
+            visualizer._on_export_finished()

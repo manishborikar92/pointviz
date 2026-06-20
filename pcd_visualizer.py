@@ -8,7 +8,8 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                             QSlider, QComboBox, QFileDialog, QMessageBox, 
                             QGroupBox, QCheckBox, QSplitter, QProgressBar,
                             QTabWidget, QStatusBar, QScrollArea, QDialog,
-                            QLineEdit, QRadioButton, QButtonGroup, QDoubleSpinBox)
+                            QLineEdit, QRadioButton, QButtonGroup, QDoubleSpinBox,
+                            QProgressDialog)
 from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal, pyqtSlot, QSettings
 from PyQt6.QtGui import QIcon, QFont, QPixmap, QPalette, QColor, QAction, QSurfaceFormat
 
@@ -88,18 +89,20 @@ class LoadOptionsDialog(QDialog):
 
 
 class PointCloudProcessor(QThread):
-    """Thread for processing point cloud operations with downsampling."""
+    """Thread for processing point cloud operations with downsampling and export."""
     finished = pyqtSignal()
     progress = pyqtSignal(int)
     error = pyqtSignal(str)
     # Emits the processed (possibly downsampled) point cloud and the original point count
     loaded = pyqtSignal(object, int)
+    exported = pyqtSignal(str)  # Emitted on successful export
     
-    def __init__(self, file_path: str, load_options: dict, operation: str = "load"):
+    def __init__(self, file_path: str, load_options: dict = None, operation: str = "load", point_cloud = None):
         super().__init__()
         self.file_path = file_path
         self.operation = operation
-        self.load_options = load_options
+        self.load_options = load_options or {}
+        self.point_cloud = point_cloud
         
     def run(self):
         try:
@@ -139,16 +142,6 @@ class PointCloudProcessor(QThread):
                 if self.isInterruptionRequested():
                     return
                 self.progress.emit(60)
-
-                # Perform heavy computations ONLY on the downsampled cloud
-                if not processed_pcd.has_normals():
-                    processed_pcd.estimate_normals(
-                        search_param=o3d.geometry.KDTreeSearchParamHybrid(
-                            radius=0.1, max_nn=30))
-                
-                if self.isInterruptionRequested():
-                    return
-                self.progress.emit(80)
                 
                 center = processed_pcd.get_center()
                 processed_pcd.translate(-center)
@@ -162,8 +155,22 @@ class PointCloudProcessor(QThread):
                 
                 self.progress.emit(100)
                 
+            elif self.operation == "export":
+                if self.point_cloud is None:
+                    raise ValueError("No point cloud data to export")
+                self.progress.emit(30)
+                if self.isInterruptionRequested():
+                    return
+                # Write point cloud to file
+                o3d.io.write_point_cloud(self.file_path, self.point_cloud)
+                self.progress.emit(80)
+                if self.isInterruptionRequested():
+                    return
+                self.progress.emit(100)
+                self.exported.emit(self.file_path)
+                
         except Exception as e:
-            self.error.emit(f"Error loading point cloud: {str(e)}")
+            self.error.emit(f"Error during point cloud operation '{self.operation}': {str(e)}")
         
         finally:
             self.finished.emit()
@@ -198,6 +205,7 @@ class PyVistaWidget(QWidget):
         self.normals_actor = None
         self.axes_actor = None
         self.current_point_cloud = None
+        self.color_cache = {}
         
         # Track current visualization settings
         self.current_point_size = 2  # Default point size is 2
@@ -276,6 +284,7 @@ class PyVistaWidget(QWidget):
         # Only do full re-render if point cloud changed or forced
         if self.current_point_cloud is not point_cloud or force_refresh:
             self.current_point_cloud = point_cloud
+            self.color_cache.clear()
             self.render_point_cloud()
         
     def render_point_cloud(self):
@@ -296,12 +305,12 @@ class PyVistaWidget(QWidget):
             return
             
         # Create PyVista point cloud
-        pv_cloud = pv.PolyData(points)
+        self.pv_cloud = pv.PolyData(points)
         
         # Apply current color mode
         colored_points = self._apply_color_mode(points)
         if colored_points is not None:
-            pv_cloud['colors'] = colored_points
+            self.pv_cloud['colors'] = colored_points
             
         # Add point cloud to plotter
         render_args = {
@@ -309,10 +318,10 @@ class PyVistaWidget(QWidget):
             'render_points_as_spheres': len(points) <= 50000
         }
         
-        if 'colors' in pv_cloud.array_names:
+        if 'colors' in self.pv_cloud.array_names:
             render_args.update({'scalars': 'colors', 'rgb': True})
             
-        self.point_cloud_actor = self.plotter.add_mesh(pv_cloud, **render_args)
+        self.point_cloud_actor = self.plotter.add_mesh(self.pv_cloud, **render_args)
         
         # Add normals if enabled
         if self.show_normals:
@@ -329,11 +338,18 @@ class PyVistaWidget(QWidget):
         if self.normals_actor is not None:
             self.plotter.remove_actor(self.normals_actor)
             self.normals_actor = None
+        self.pv_cloud = None
         
     def _add_normals_visualization(self, points: np.ndarray):
-        """Add normal vectors visualization"""
+        """Add normal vectors visualization with on-demand estimation"""
         if not self.current_point_cloud.has_normals():
-            return
+            try:
+                self.current_point_cloud.estimate_normals(
+                    search_param=o3d.geometry.KDTreeSearchParamHybrid(
+                        radius=0.1, max_nn=30))
+            except Exception as e:
+                print(f"Warning: Could not estimate normals: {e}")
+                return
             
         try:
             normals = np.asarray(self.current_point_cloud.normals)
@@ -357,33 +373,42 @@ class PyVistaWidget(QWidget):
             print(f"Warning: Could not add normals visualization: {e}")
         
     def _apply_color_mode(self, points: np.ndarray) -> Optional[np.ndarray]:
-        """Apply different color modes to the point cloud"""
+        """Apply different color modes to the point cloud with caching"""
+        if self.current_color_mode in self.color_cache:
+            return self.color_cache[self.current_color_mode]
+            
         original_colors = None
         if self.current_point_cloud.has_colors():
             original_colors = np.asarray(self.current_point_cloud.colors)
         
+        colors = None
         if self.current_color_mode == "Original" and original_colors is not None:
             if original_colors.max() <= 1.0:
-                return (original_colors * 255).astype(np.uint8)
-            return original_colors.astype(np.uint8)
+                colors = (original_colors * 255).astype(np.uint8)
+            else:
+                colors = original_colors.astype(np.uint8)
             
         elif self.current_color_mode == "Height":
-            return self._color_by_height(points)
+            colors = self._color_by_height(points)
             
         elif self.current_color_mode == "Elevation":
-            return self._color_by_elevation(points)
+            colors = self._color_by_elevation(points)
             
         elif self.current_color_mode == "Distance":
-            return self._color_by_distance(points)
+            colors = self._color_by_distance(points)
             
         elif self.current_color_mode == "Normal":
-            return self._color_by_normal()
+            colors = self._color_by_normal()
             
         elif self.current_color_mode == "Curvature":
-            return self._color_by_curvature(points)
+            colors = self._color_by_curvature(points)
             
-        # Default uniform color
-        return np.full((len(points), 3), [128, 128, 128], dtype=np.uint8)
+        if colors is None:
+            # Default uniform color
+            colors = np.full((len(points), 3), [128, 128, 128], dtype=np.uint8)
+            
+        self.color_cache[self.current_color_mode] = colors
+        return colors
     
     def _color_by_height(self, points: np.ndarray) -> np.ndarray:
         """Color points by Z coordinate (height)"""
@@ -417,9 +442,15 @@ class PyVistaWidget(QWidget):
         return (colors * 255).astype(np.uint8)
     
     def _color_by_normal(self) -> Optional[np.ndarray]:
-        """Color by normal direction"""
+        """Color by normal direction with on-demand estimation"""
         if not self.current_point_cloud.has_normals():
-            return None
+            try:
+                self.current_point_cloud.estimate_normals(
+                    search_param=o3d.geometry.KDTreeSearchParamHybrid(
+                        radius=0.1, max_nn=30))
+            except Exception as e:
+                print(f"Warning: Could not estimate normals: {e}")
+                return None
         normals = np.asarray(self.current_point_cloud.normals)
         colors = np.abs(normals)
         return (colors * 255).astype(np.uint8)
@@ -509,6 +540,30 @@ class PyVistaWidget(QWidget):
             return
             
         self.current_color_mode = mode
+        
+        # Optimize by updating scalars in-place if possible
+        if (self.point_cloud_actor is not None and 
+            hasattr(self, 'pv_cloud') and 
+            self.pv_cloud is not None and 
+            self.current_point_cloud is not None):
+            try:
+                points = np.asarray(self.current_point_cloud.points)
+                colored_points = self._apply_color_mode(points)
+                if colored_points is not None:
+                    self.pv_cloud.point_data['colors'] = colored_points
+                    
+                    # If normals are visible, they might need to be redrawn (e.g. if we switch to Normal mode,
+                    # normals are estimated on-demand)
+                    if self.show_normals:
+                        self.toggle_normals_display(False)
+                        self.toggle_normals_display(True)
+                        
+                    if self.plotter:
+                        self.plotter.render()
+                    return
+            except Exception as e:
+                print(f"Warning: Could not update colors in-place: {e}")
+                
         self.render_point_cloud()
         
     def update_background(self, bg_type: str):
@@ -923,8 +978,11 @@ class PCDVisualizer(QMainWindow):
     def _on_color_mode_changed(self):
         """Handle color mode changes"""
         if self.point_cloud:
+            had_normals = self.point_cloud.has_normals()
             color_mode = self.color_mode_combo.currentText()
             self.pyvista_widget.update_color_mode(color_mode)
+            if not had_normals and self.point_cloud.has_normals():
+                self._update_statistics()
         
     def _on_background_changed(self):
         """Handle background changes"""
@@ -933,8 +991,12 @@ class PCDVisualizer(QMainWindow):
         
     def _on_normals_toggled(self):
         """Handle normals toggle"""
-        show = self.normals_checkbox.isChecked()
-        self.pyvista_widget.toggle_normals_display(show)
+        if self.point_cloud:
+            had_normals = self.point_cloud.has_normals()
+            show = self.normals_checkbox.isChecked()
+            self.pyvista_widget.toggle_normals_display(show)
+            if not had_normals and self.point_cloud.has_normals():
+                self._update_statistics()
     
     # Camera view methods
     def reset_view(self):
@@ -1009,7 +1071,7 @@ class PCDVisualizer(QMainWindow):
         self.processor_thread.start()
     
     def export_file(self):
-        """Export point cloud to file"""
+        """Export point cloud to file in a background thread"""
         if not self.point_cloud:
             QMessageBox.warning(self, "Warning", "No point cloud loaded")
             return
@@ -1019,13 +1081,49 @@ class PCDVisualizer(QMainWindow):
             "PCD Files (*.pcd);;PLY Files (*.ply);;All Files (*)"
         )
         
-        if file_path:
-            try:
-                # Note: This exports the potentially downsampled point cloud
-                o3d.io.write_point_cloud(file_path, self.point_cloud)
-                QMessageBox.information(self, "Success", f"Point cloud exported to {file_path}")
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Failed to export: {str(e)}")
+        if not file_path:
+            return
+            
+        # Create progress dialog
+        self.export_progress = QProgressDialog("Exporting point cloud...", "Cancel", 0, 100, self)
+        self.export_progress.setWindowModality(Qt.WindowModality.WindowModal)
+        self.export_progress.setAutoClose(True)
+        self.export_progress.setValue(0)
+        
+        # Create thread
+        self.export_thread = PointCloudProcessor(
+            file_path=file_path,
+            operation="export",
+            point_cloud=self.point_cloud
+        )
+        
+        # Connect signals
+        self.export_thread.progress.connect(self.export_progress.setValue)
+        self.export_thread.error.connect(self._on_export_error)
+        self.export_thread.exported.connect(self._on_export_success)
+        self.export_thread.finished.connect(self._on_export_finished)
+        
+        # If user clicks cancel on progress dialog, request thread interruption
+        self.export_progress.canceled.connect(self.export_thread.requestInterruption)
+        
+        self.export_thread.start()
+
+    @pyqtSlot(str)
+    def _on_export_error(self, err_msg: str):
+        QMessageBox.critical(self, "Export Error", f"Failed to export: {err_msg}")
+        
+    @pyqtSlot(str)
+    def _on_export_success(self, file_path: str):
+        QMessageBox.information(self, "Success", f"Point cloud exported successfully to:\n{file_path}")
+        
+    @pyqtSlot()
+    def _on_export_finished(self):
+        if hasattr(self, 'export_progress') and self.export_progress:
+            self.export_progress.close()
+            self.export_progress = None
+        if hasattr(self, 'export_thread') and self.export_thread:
+            self.export_thread.deleteLater()
+            self.export_thread = None
     
     def take_screenshot(self):
         """Take a screenshot"""
@@ -1059,6 +1157,19 @@ class PCDVisualizer(QMainWindow):
                                     f"(Downsampled from {original_point_count:,})")
         else:
             self.file_label.setText(f"Loaded: {displayed_count:,} points")
+            
+        # Determine adaptive point size based on count
+        if displayed_count < 5000:
+            suggested_size = 5
+        elif displayed_count < 25000:
+            suggested_size = 3
+        elif displayed_count < 100000:
+            suggested_size = 2
+        else:
+            suggested_size = 1
+            
+        self.point_size_slider.setValue(suggested_size)
+        self.point_size_label.setText(str(suggested_size))
         
         # Update statistics and visualization
         self._update_statistics()
