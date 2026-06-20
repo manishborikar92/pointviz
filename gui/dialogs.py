@@ -100,9 +100,23 @@ class AboutDialog(QDialog):
             <li>Professional camera controls and view presets</li>
             <li>Export capabilities for screenshots and data</li>
         </ul>
+
+        <!-- <p>Developed by: <b>Quantnueral Pvt. Ltd.</b></p> -->
         """
 
         layout = QVBoxLayout()
+        
+        # Add company logo with theme detection
+        # logo_label = QLabel()
+        
+        # Choose logo based on theme
+        # logo_filename = "logo_dark.png" if self.is_dark_mode else "logo_light.png"
+        # from config import ASSETS_DIR
+        # logo_path = ASSETS_DIR / logo_filename
+
+        # from PyQt6.QtGui import QIcon
+        # logo_label.setPixmap(QIcon(str(logo_path)).pixmap(140, 25))
+        # logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         label = QLabel(about_text)
         label.setWordWrap(True)
@@ -111,6 +125,16 @@ class AboutDialog(QDialog):
 
         ok_button = QPushButton("OK")
         ok_button.clicked.connect(self.accept)
+        
+        # layout.addWidget(logo_label)
+        
+        # layout.addSpacing(5)
+        # separator = QWidget()
+        # separator.setFixedHeight(1)
+        # separator_color = "#5a5a5a" if self.is_dark_mode else "#d0d0d0"
+        # separator.setStyleSheet(f"background-color: {separator_color};")
+        # layout.addWidget(separator)
+        # layout.addSpacing(5)
         
         layout.addWidget(label)
         layout.addStretch()
