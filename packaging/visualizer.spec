@@ -14,7 +14,6 @@ datas = [
     ('../assets', 'assets')
 ]
 
-# Hidden imports for PyInstaller to find all necessary modules
 hiddenimports = [
     # GUI frameworks
     'PyQt6.QtCore',
@@ -43,6 +42,22 @@ hiddenimports = [
     'typing',
     # Settings and configuration
     'PyQt6.QtCore.QSettings',
+    # Application modules
+    'pointviz',
+    'pointviz.config',
+    'pointviz.logger',
+    'pointviz.main',
+    'pointviz.core',
+    'pointviz.core.point_cloud_processor',
+    'pointviz.core.statistics',
+    'pointviz.gui',
+    'pointviz.gui.pyvista_widget',
+    'pointviz.gui.dialogs',
+    'pointviz.gui.theme_manager',
+    'pointviz.gui.menus',
+    'pointviz.gui.control_panel',
+    'pointviz.gui.visualization_panel',
+    'pointviz.gui.main_window',
 ]
 
 # Binaries to exclude (to reduce final executable size)

@@ -8,11 +8,15 @@ import pyvista as pv
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QPalette, QColor
 
-# Add workspace to path to import pcd_visualizer
+# Add workspace to path to import pointviz
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-import pcd_visualizer
-from pcd_visualizer import configure_environment, PointCloudProcessor, PyVistaWidget, PCDVisualizer
+from pointviz.main import configure_environment
+from pointviz.core.point_cloud_processor import PointCloudProcessor
+from pointviz.gui.pyvista_widget import PyVistaWidget
+from pointviz.gui.main_window import PCDVisualizer
+from pointviz.gui.dialogs import LoadOptionsDialog, AboutDialog
+import pointviz.core.statistics as stats
 
 @pytest.fixture(scope="session")
 def qapp():
@@ -42,8 +46,8 @@ def test_get_system_theme_preference_success(qapp):
         mock_palette.color.return_value = mock_color
         mock_app.return_value.palette.return_value = mock_palette
         
-        with mock.patch('pcd_visualizer.PCDVisualizer.init_ui'), \
-             mock.patch('pcd_visualizer.PCDVisualizer.apply_theme'):
+        with mock.patch('pointviz.gui.main_window.PCDVisualizer.init_ui'), \
+             mock.patch('pointviz.gui.main_window.PCDVisualizer.apply_theme'):
             visualizer = PCDVisualizer()
             pref = visualizer._get_system_theme_preference()
             assert pref is True
@@ -51,8 +55,8 @@ def test_get_system_theme_preference_success(qapp):
 def test_get_system_theme_preference_exception(qapp):
     with mock.patch.object(QApplication, 'instance') as mock_app:
         mock_app.return_value.palette.side_effect = Exception("Palette error")
-        with mock.patch('pcd_visualizer.PCDVisualizer.init_ui'), \
-             mock.patch('pcd_visualizer.PCDVisualizer.apply_theme'):
+        with mock.patch('pointviz.gui.main_window.PCDVisualizer.init_ui'), \
+             mock.patch('pointviz.gui.main_window.PCDVisualizer.apply_theme'):
             visualizer = PCDVisualizer()
             pref = visualizer._get_system_theme_preference()
             assert pref is False  # Safe fallback
@@ -74,7 +78,7 @@ def test_point_cloud_processor_interruption():
         assert loaded_emitted is False
 
 def test_color_by_curvature(qapp):
-    with mock.patch('pcd_visualizer.PyVistaWidget.setup_visualization'):
+    with mock.patch('pointviz.gui.pyvista_widget.PyVistaWidget.setup_visualization'):
         widget = PyVistaWidget()
         
         pcd = o3d.geometry.PointCloud()
@@ -89,7 +93,7 @@ def test_color_by_curvature(qapp):
         assert pcd.has_covariances()
 
 def test_color_by_curvature_error_fallback(qapp):
-    with mock.patch('pcd_visualizer.PyVistaWidget.setup_visualization'):
+    with mock.patch('pointviz.gui.pyvista_widget.PyVistaWidget.setup_visualization'):
         widget = PyVistaWidget()
         
         # Use a mock object instead of a pybind PointCloud instance to safely mock estimate_covariances
@@ -107,9 +111,9 @@ def test_color_by_curvature_error_fallback(qapp):
 
 def test_conditional_sphere_rendering(qapp):
     # Test C1 logic: spheres if points <= 50,000, flat points otherwise
-    with mock.patch('pcd_visualizer.PyVistaWidget.setup_visualization'), \
-         mock.patch('pcd_visualizer.PyVistaWidget._clear_actors'), \
-         mock.patch('pcd_visualizer.PyVistaWidget._apply_color_mode', return_value=None):
+    with mock.patch('pointviz.gui.pyvista_widget.PyVistaWidget.setup_visualization'), \
+         mock.patch('pointviz.gui.pyvista_widget.PyVistaWidget._clear_actors'), \
+         mock.patch('pointviz.gui.pyvista_widget.PyVistaWidget._apply_color_mode', return_value=None):
         
         widget = PyVistaWidget()
         widget.plotter = mock.Mock()
@@ -154,7 +158,7 @@ def test_deferred_normals_loading():
 
 def test_on_demand_normals_estimation(qapp):
     # Verify that normals are estimated on-demand when requested
-    with mock.patch('pcd_visualizer.PyVistaWidget.setup_visualization'):
+    with mock.patch('pointviz.gui.pyvista_widget.PyVistaWidget.setup_visualization'):
         widget = PyVistaWidget()
         pcd = o3d.geometry.PointCloud()
         pts = np.random.rand(10, 3)
@@ -171,7 +175,7 @@ def test_on_demand_normals_estimation(qapp):
 
 def test_color_cache(qapp):
     # Verify color cache lookup, storage, and invalidation
-    with mock.patch('pcd_visualizer.PyVistaWidget.setup_visualization'):
+    with mock.patch('pointviz.gui.pyvista_widget.PyVistaWidget.setup_visualization'):
         widget = PyVistaWidget()
         pcd = o3d.geometry.PointCloud()
         pts = np.random.rand(10, 3)
@@ -201,7 +205,7 @@ def test_color_cache(qapp):
 
 def test_inplace_scalar_update(qapp):
     # Verify in-place scalar updates in update_color_mode
-    with mock.patch('pcd_visualizer.PyVistaWidget.setup_visualization'):
+    with mock.patch('pointviz.gui.pyvista_widget.PyVistaWidget.setup_visualization'):
         widget = PyVistaWidget()
         widget.plotter = mock.Mock()
         widget.point_cloud_actor = mock.Mock()
@@ -226,10 +230,10 @@ def test_inplace_scalar_update(qapp):
 
 def test_adaptive_point_size(qapp):
     # Verify adaptive point size selection on load
-    with mock.patch('pcd_visualizer.PCDVisualizer.init_ui'), \
-         mock.patch('pcd_visualizer.PCDVisualizer.apply_theme'), \
-         mock.patch('pcd_visualizer.PCDVisualizer._update_statistics'), \
-         mock.patch('pcd_visualizer.PyVistaWidget.update_point_cloud'):
+    with mock.patch('pointviz.gui.main_window.PCDVisualizer.init_ui'), \
+         mock.patch('pointviz.gui.main_window.PCDVisualizer.apply_theme'), \
+         mock.patch('pointviz.gui.main_window.PCDVisualizer._update_statistics'), \
+         mock.patch('pointviz.gui.pyvista_widget.PyVistaWidget.update_point_cloud'):
         
         visualizer = PCDVisualizer()
         visualizer.file_label = mock.Mock()
@@ -254,8 +258,8 @@ def test_adaptive_point_size(qapp):
 
 def test_background_export(qapp):
     # Verify background threaded export initiates correctly
-    with mock.patch('pcd_visualizer.PCDVisualizer.init_ui'), \
-         mock.patch('pcd_visualizer.PCDVisualizer.apply_theme'), \
+    with mock.patch('pointviz.gui.main_window.PCDVisualizer.init_ui'), \
+         mock.patch('pointviz.gui.main_window.PCDVisualizer.apply_theme'), \
          mock.patch('PyQt6.QtWidgets.QFileDialog.getSaveFileName', return_value=("test_export.pcd", "PCD Files (*.pcd)")):
         
         visualizer = PCDVisualizer()
@@ -272,3 +276,65 @@ def test_background_export(qapp):
             
             # Clean up
             visualizer._on_export_finished()
+
+# --- Unit Tests for extracted statistics computations ---
+
+def test_statistics_calculate_volume():
+    # Bounding box calculation on simple points
+    points = np.array([
+        [0.0, 0.0, 0.0],
+        [1.0, 2.0, 3.0]
+    ])
+    vol = stats.calculate_volume(points)
+    assert vol == 6.0  # 1 * 2 * 3
+    
+    empty_points = np.empty((0, 3))
+    assert stats.calculate_volume(empty_points) == 0.0
+
+def test_statistics_calculate_density():
+    points = np.random.rand(10, 3)
+    assert stats.calculate_density(points, 2.0) == 5.0
+    assert stats.calculate_density(points, 0.0) == 0.0
+
+def test_statistics_compute_centroid():
+    points = np.array([
+        [1.0, 1.0, 1.0],
+        [3.0, 3.0, 3.0]
+    ])
+    centroid = stats.compute_centroid(points)
+    assert np.allclose(centroid, [2.0, 2.0, 2.0])
+    
+    empty_points = np.empty((0, 3))
+    assert np.allclose(stats.compute_centroid(empty_points), [0.0, 0.0, 0.0])
+
+def test_statistics_compute_ranges():
+    points = np.array([
+        [-1.0, 5.0, 2.0],
+        [3.0, -2.0, 10.0]
+    ])
+    ranges = stats.compute_ranges(points)
+    assert ranges["x"] == (-1.0, 3.0)
+    assert ranges["y"] == (-2.0, 5.0)
+    assert ranges["z"] == (2.0, 10.0)
+
+def test_statistics_compute_distance_stats():
+    points = np.array([
+        [0.0, 0.0, 0.0],
+        [0.0, 3.0, 0.0],
+        [0.0, -3.0, 0.0]
+    ])
+    centroid = np.array([0.0, 0.0, 0.0])
+    dist_stats = stats.compute_distance_stats(points, centroid)
+    assert dist_stats["min"] == 0.0
+    assert dist_stats["max"] == 3.0
+    assert dist_stats["mean"] == 2.0  # (0 + 3 + 3) / 3
+
+def test_statistics_compute_color_stats():
+    colors = np.array([
+        [0.1, 0.2, 0.3],
+        [0.5, 0.6, 0.7]
+    ])
+    color_stats = stats.compute_color_stats(colors)
+    assert color_stats["r"]["mean"] == 0.3
+    assert color_stats["g"]["mean"] == 0.4
+    assert color_stats["b"]["mean"] == 0.5
