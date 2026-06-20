@@ -572,7 +572,7 @@ This reduces 125 lines to ~35 lines.
 **Objectives:** Extract monolith into maintainable modules.
 
 **Tasks:**
-1. **[Completed]** Create package structure: `pointviz/core/`, `pointviz/gui/`, `pointviz/config.py`
+1. **[Completed]** Create flat directory layout: `core/`, `gui/`, `config.py`, `logger.py`, `main.py`
 2. **[Completed]** Extract `config.py` — all magic numbers and constants
 3. **[Completed]** Extract `core/point_cloud_processor.py` — background loading thread
 4. **[Completed]** Extract `core/statistics.py` — all statistics computation
@@ -588,33 +588,33 @@ This reduces 125 lines to ~35 lines.
 14. **[Completed]** Update [visualizer.spec](packaging/visualizer.spec) for new structure
 
 **Implementation Details:**
-- **Package Structure**: Extracted the monolith into a clean Python package structure: `pointviz/config.py`, `pointviz/main.py`, `pointviz/logger.py`, `pointviz/core/` (processing + stats), and `pointviz/gui/` (widgets, windows, menus, dialogs, styling).
+- **Directory Layout**: Extracted the monolith into a clean flat layout directly under the root: `config.py`, `main.py`, `logger.py`, `core/` (processing + stats), and `gui/` (widgets, windows, menus, dialogs, styling).
 - **Config & Logging**: Created central configuration module (`config.py`) storing app metadata, margins, bounds, performance thresholds, and preset color mappings. Set up centralized logging using a standard `logging` setup with `RotatingFileHandler` writing logs to `~/.pointviz/pointviz.log` alongside console loggers, replacing all 23+ raw `print()` statements.
 - **Theme Templating**: Resolved duplicate stylesheets (M2) by defining a dictionary-based color config for dark and light themes, mapping them into a unified template stylesheet string using Python formatting, reducing overall CSS size and maintenance overhead.
 - **Sub-panel Separation**: Refactored the `PCDVisualizer` main window into distinct panel/widget modules: `ControlPanel`, `VisualizationPanel`, `MenuBarBuilder` (`menus.py`), `AboutDialog`, `LoadOptionsDialog`. Shared stats labels are updated directly from the parent to avoid breakages.
-- **Root Entry Wrap**: Replaced the original `pcd_visualizer.py` with a compatibility runner that delegates directly to `pointviz.main:main`, ensuring all existing command line usage and packaging processes continue working seamlessly.
+- **Root Entry Wrap**: Replaced the original `pcd_visualizer.py` with a compatibility runner that delegates directly to `main:main`, ensuring all existing command line usage and packaging processes continue working seamlessly.
 
 **Affected Files:**
 - [pcd_visualizer.py](pcd_visualizer.py)
-- [config.py](pointviz/config.py) [New]
-- [logger.py](pointviz/logger.py) [New]
-- [main.py](pointviz/main.py) [New]
-- [point_cloud_processor.py](pointviz/core/point_cloud_processor.py) [New]
-- [statistics.py](pointviz/core/statistics.py) [New]
-- [pyvista_widget.py](pointviz/gui/pyvista_widget.py) [New]
-- [dialogs.py](pointviz/gui/dialogs.py) [New]
-- [theme_manager.py](pointviz/gui/theme_manager.py) [New]
-- [menus.py](pointviz/gui/menus.py) [New]
-- [control_panel.py](pointviz/gui/control_panel.py) [New]
-- [visualization_panel.py](pointviz/gui/visualization_panel.py) [New]
+- [config.py](config.py) [New]
+- [logger.py](logger.py) [New]
+- [main.py](main.py) [New]
+- [point_cloud_processor.py](core/point_cloud_processor.py) [New]
+- [statistics.py](core/statistics.py) [New]
+- [pyvista_widget.py](gui/pyvista_widget.py) [New]
+- [dialogs.py](gui/dialogs.py) [New]
+- [theme_manager.py](gui/theme_manager.py) [New]
+- [menus.py](gui/menus.py) [New]
+- [control_panel.py](gui/control_panel.py) [New]
+- [visualization_panel.py](gui/visualization_panel.py) [New]
 - [test_pcd_visualizer.py](tests/test_pcd_visualizer.py)
 - [benchmark_performance.py](tests/benchmark_performance.py)
 - [visualizer.spec](packaging/visualizer.spec)
 
 **Validation Activities & Testing Evidence:**
-- **Unit and Integration Tests**: Expanded the test suite by adding 6 new unit tests directly targeting functions in `pointviz/core/statistics.py` (volume, density, centroid, coordinate stats, color stats, ranges). Total pass rate is 19/19 tests passing successfully.
+- **Unit and Integration Tests**: Expanded the test suite by adding 6 new unit tests directly targeting functions in `core/statistics.py` (volume, density, centroid, coordinate stats, color stats, ranges). Total pass rate is 19/19 tests passing successfully.
 - **Performance Benchmarks**: Executed the off-screen headless performance benchmark with 500,000 random points. All results loaded and rendered correctly, showing an instantaneous speedup for cached colors.
-- **PyInstaller Compilation**: Verified that the PyInstaller build executes and compiles cleanly, bundle-tracking the full `pointviz` package via updated hidden imports, outputting the final executable to `dist/PCDVisualizer.exe`.
+- **PyInstaller Compilation**: Verified that the PyInstaller build executes and compiles cleanly, bundle-tracking the flat modules via updated hidden imports, outputting the final executable to `dist/PCDVisualizer.exe`.
 
 **Noteworthy Decisions:**
 - **Slot Aliases**: Kept UI settings widgets and statistics labels accessible by aliasing them onto the `MainWindow` instance directly from `ControlPanel` and `VisualizationPanel`. This avoids heavy signal forwarding overhead while maintaining clean object-oriented encapsulation and 100% compatibility with original handlers.

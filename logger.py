@@ -3,7 +3,7 @@ import os
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from pointviz.config import APP_NAME
+from config import APP_NAME
 
 logger = logging.getLogger("pointviz")
 

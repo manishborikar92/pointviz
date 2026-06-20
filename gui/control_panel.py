@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import (QScrollArea, QWidget, QVBoxLayout, QHBoxLayout,
                              QPushButton, QSlider, QComboBox, QCheckBox)
 from PyQt6.QtCore import Qt
 
-from pointviz.config import BACKGROUND_STYLES, COLOR_MODES, DEFAULT_POINT_SIZE
+from config import BACKGROUND_STYLES, COLOR_MODES, DEFAULT_POINT_SIZE
 
 class ControlPanel(QScrollArea):
     """Left control panel sidebar for visualizer settings and file information."""

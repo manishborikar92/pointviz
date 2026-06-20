@@ -1,6 +1,6 @@
 from PyQt6.QtGui import QPalette, QColor
 from PyQt6.QtWidgets import QApplication
-from pointviz.logger import logger
+from logger import logger
 
 # Theme palette variables
 DARK_THEME_VARS = {

@@ -7,15 +7,15 @@ from PyQt6.QtGui import QSurfaceFormat
 
 import pyvista as pv
 
-from pointviz.config import (
+from config import (
     OPENGL_DEPTH_BUFFER_SIZE,
     OPENGL_STENCIL_BUFFER_SIZE,
     APP_NAME,
     APP_VERSION,
     ORGANIZATION_NAME
 )
-from pointviz.logger import setup_logging, logger
-from pointviz.gui.main_window import PCDVisualizer
+from logger import setup_logging, logger
+from gui.main_window import PCDVisualizer
 
 def configure_environment():
     """Configure environment variables for better compatibility."""

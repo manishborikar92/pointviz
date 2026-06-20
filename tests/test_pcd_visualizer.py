@@ -8,15 +8,15 @@ import pyvista as pv
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QPalette, QColor
 
-# Add workspace to path to import pointviz
+# Add workspace to path to import flat packages
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from pointviz.main import configure_environment
-from pointviz.core.point_cloud_processor import PointCloudProcessor
-from pointviz.gui.pyvista_widget import PyVistaWidget
-from pointviz.gui.main_window import PCDVisualizer
-from pointviz.gui.dialogs import LoadOptionsDialog, AboutDialog
-import pointviz.core.statistics as stats
+from main import configure_environment
+from core.point_cloud_processor import PointCloudProcessor
+from gui.pyvista_widget import PyVistaWidget
+from gui.main_window import PCDVisualizer
+from gui.dialogs import LoadOptionsDialog, AboutDialog
+import core.statistics as stats
 
 @pytest.fixture(scope="session")
 def qapp():
@@ -46,8 +46,8 @@ def test_get_system_theme_preference_success(qapp):
         mock_palette.color.return_value = mock_color
         mock_app.return_value.palette.return_value = mock_palette
         
-        with mock.patch('pointviz.gui.main_window.PCDVisualizer.init_ui'), \
-             mock.patch('pointviz.gui.main_window.PCDVisualizer.apply_theme'):
+        with mock.patch('gui.main_window.PCDVisualizer.init_ui'), \
+             mock.patch('gui.main_window.PCDVisualizer.apply_theme'):
             visualizer = PCDVisualizer()
             pref = visualizer._get_system_theme_preference()
             assert pref is True
@@ -55,8 +55,8 @@ def test_get_system_theme_preference_success(qapp):
 def test_get_system_theme_preference_exception(qapp):
     with mock.patch.object(QApplication, 'instance') as mock_app:
         mock_app.return_value.palette.side_effect = Exception("Palette error")
-        with mock.patch('pointviz.gui.main_window.PCDVisualizer.init_ui'), \
-             mock.patch('pointviz.gui.main_window.PCDVisualizer.apply_theme'):
+        with mock.patch('gui.main_window.PCDVisualizer.init_ui'), \
+             mock.patch('gui.main_window.PCDVisualizer.apply_theme'):
             visualizer = PCDVisualizer()
             pref = visualizer._get_system_theme_preference()
             assert pref is False  # Safe fallback
@@ -78,7 +78,7 @@ def test_point_cloud_processor_interruption():
         assert loaded_emitted is False
 
 def test_color_by_curvature(qapp):
-    with mock.patch('pointviz.gui.pyvista_widget.PyVistaWidget.setup_visualization'):
+    with mock.patch('gui.pyvista_widget.PyVistaWidget.setup_visualization'):
         widget = PyVistaWidget()
         
         pcd = o3d.geometry.PointCloud()
@@ -93,7 +93,7 @@ def test_color_by_curvature(qapp):
         assert pcd.has_covariances()
 
 def test_color_by_curvature_error_fallback(qapp):
-    with mock.patch('pointviz.gui.pyvista_widget.PyVistaWidget.setup_visualization'):
+    with mock.patch('gui.pyvista_widget.PyVistaWidget.setup_visualization'):
         widget = PyVistaWidget()
         
         # Use a mock object instead of a pybind PointCloud instance to safely mock estimate_covariances
@@ -111,9 +111,9 @@ def test_color_by_curvature_error_fallback(qapp):
 
 def test_conditional_sphere_rendering(qapp):
     # Test C1 logic: spheres if points <= 50,000, flat points otherwise
-    with mock.patch('pointviz.gui.pyvista_widget.PyVistaWidget.setup_visualization'), \
-         mock.patch('pointviz.gui.pyvista_widget.PyVistaWidget._clear_actors'), \
-         mock.patch('pointviz.gui.pyvista_widget.PyVistaWidget._apply_color_mode', return_value=None):
+    with mock.patch('gui.pyvista_widget.PyVistaWidget.setup_visualization'), \
+         mock.patch('gui.pyvista_widget.PyVistaWidget._clear_actors'), \
+         mock.patch('gui.pyvista_widget.PyVistaWidget._apply_color_mode', return_value=None):
         
         widget = PyVistaWidget()
         widget.plotter = mock.Mock()
@@ -158,7 +158,7 @@ def test_deferred_normals_loading():
 
 def test_on_demand_normals_estimation(qapp):
     # Verify that normals are estimated on-demand when requested
-    with mock.patch('pointviz.gui.pyvista_widget.PyVistaWidget.setup_visualization'):
+    with mock.patch('gui.pyvista_widget.PyVistaWidget.setup_visualization'):
         widget = PyVistaWidget()
         pcd = o3d.geometry.PointCloud()
         pts = np.random.rand(10, 3)
@@ -175,7 +175,7 @@ def test_on_demand_normals_estimation(qapp):
 
 def test_color_cache(qapp):
     # Verify color cache lookup, storage, and invalidation
-    with mock.patch('pointviz.gui.pyvista_widget.PyVistaWidget.setup_visualization'):
+    with mock.patch('gui.pyvista_widget.PyVistaWidget.setup_visualization'):
         widget = PyVistaWidget()
         pcd = o3d.geometry.PointCloud()
         pts = np.random.rand(10, 3)
@@ -205,7 +205,7 @@ def test_color_cache(qapp):
 
 def test_inplace_scalar_update(qapp):
     # Verify in-place scalar updates in update_color_mode
-    with mock.patch('pointviz.gui.pyvista_widget.PyVistaWidget.setup_visualization'):
+    with mock.patch('gui.pyvista_widget.PyVistaWidget.setup_visualization'):
         widget = PyVistaWidget()
         widget.plotter = mock.Mock()
         widget.point_cloud_actor = mock.Mock()
@@ -230,10 +230,10 @@ def test_inplace_scalar_update(qapp):
 
 def test_adaptive_point_size(qapp):
     # Verify adaptive point size selection on load
-    with mock.patch('pointviz.gui.main_window.PCDVisualizer.init_ui'), \
-         mock.patch('pointviz.gui.main_window.PCDVisualizer.apply_theme'), \
-         mock.patch('pointviz.gui.main_window.PCDVisualizer._update_statistics'), \
-         mock.patch('pointviz.gui.pyvista_widget.PyVistaWidget.update_point_cloud'):
+    with mock.patch('gui.main_window.PCDVisualizer.init_ui'), \
+         mock.patch('gui.main_window.PCDVisualizer.apply_theme'), \
+         mock.patch('gui.main_window.PCDVisualizer._update_statistics'), \
+         mock.patch('gui.pyvista_widget.PyVistaWidget.update_point_cloud'):
         
         visualizer = PCDVisualizer()
         visualizer.file_label = mock.Mock()
@@ -258,8 +258,8 @@ def test_adaptive_point_size(qapp):
 
 def test_background_export(qapp):
     # Verify background threaded export initiates correctly
-    with mock.patch('pointviz.gui.main_window.PCDVisualizer.init_ui'), \
-         mock.patch('pointviz.gui.main_window.PCDVisualizer.apply_theme'), \
+    with mock.patch('gui.main_window.PCDVisualizer.init_ui'), \
+         mock.patch('gui.main_window.PCDVisualizer.apply_theme'), \
          mock.patch('PyQt6.QtWidgets.QFileDialog.getSaveFileName', return_value=("test_export.pcd", "PCD Files (*.pcd)")):
         
         visualizer = PCDVisualizer()

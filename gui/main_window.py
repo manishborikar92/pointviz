@@ -11,15 +11,15 @@ from PyQt6.QtGui import QIcon, QPalette, QColor
 
 import open3d as o3d
 
-from pointviz.config import LARGE_FILE_THRESHOLD_MB, ICON_PATH, APP_NAME
-from pointviz.logger import logger
-from pointviz.core.point_cloud_processor import PointCloudProcessor
-import pointviz.core.statistics as statistics
-from pointviz.gui.control_panel import ControlPanel
-from pointviz.gui.visualization_panel import VisualizationPanel
-from pointviz.gui.dialogs import AboutDialog, LoadOptionsDialog
-from pointviz.gui.menus import setup_menus
-from pointviz.gui.theme_manager import apply_theme
+from config import LARGE_FILE_THRESHOLD_MB, ICON_PATH, APP_NAME
+from logger import logger
+from core.point_cloud_processor import PointCloudProcessor
+import core.statistics as statistics
+from gui.control_panel import ControlPanel
+from gui.visualization_panel import VisualizationPanel
+from gui.dialogs import AboutDialog, LoadOptionsDialog
+from gui.menus import setup_menus
+from gui.theme_manager import apply_theme
 
 class PCDVisualizer(QMainWindow):
     """Main application window for PCD visualization."""

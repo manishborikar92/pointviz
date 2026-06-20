@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTabWidget, QScrollArea, QGrou
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt
 
-from pointviz.gui.pyvista_widget import PyVistaWidget
+from gui.pyvista_widget import PyVistaWidget
 
 class VisualizationPanel(QWidget):
     """Main visualization tab container, housing the 3D viewer and statistics tab."""

@@ -8,7 +8,7 @@ from typing import Optional
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel
 from PyQt6.QtCore import Qt
 
-from pointviz.config import (
+from config import (
     COLOR_MODES,
     BACKGROUND_STYLES,
     DEFAULT_POINT_SIZE,
@@ -16,7 +16,7 @@ from pointviz.config import (
     NORMAL_ESTIMATION_RADIUS,
     NORMAL_ESTIMATION_MAX_NN
 )
-from pointviz.logger import logger
+from logger import logger
 
 class PyVistaWidget(QWidget):
     """PyVista visualization widget with improved update mechanisms"""

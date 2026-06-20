@@ -1,1 +1,0 @@
-# pointviz GUI components

@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                              QDoubleSpinBox)
 from PyQt6.QtCore import Qt
 
-from pointviz.config import DEFAULT_VOXEL_SIZE
+from config import DEFAULT_VOXEL_SIZE
 
 class LoadOptionsDialog(QDialog):
     """A dialog to get downsampling options from the user for large files."""

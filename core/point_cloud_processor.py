@@ -1,7 +1,7 @@
 from pathlib import Path
 import open3d as o3d
 from PyQt6.QtCore import QThread, pyqtSignal
-from pointviz.logger import logger
+from logger import logger
 
 class PointCloudProcessor(QThread):
     """Thread for processing point cloud operations with downsampling and export."""
