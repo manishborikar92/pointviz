@@ -195,8 +195,7 @@ class PCDVisualizer(QMainWindow):
                 return
             load_options = options
             
-        self.control_panel.update_file_info(file_path=str(p_file.resolve()))
-        self.control_panel.file_label.setText(f"Loading: {p_file.name}")
+        self.control_panel.set_loading_file(file_path)
         self.control_panel.set_progress_visible(True)
         self.control_panel.set_progress_value(0)
         self.status_bar.showMessage("Loading point cloud...")
@@ -294,6 +293,7 @@ class PCDVisualizer(QMainWindow):
     @pyqtSlot(object, int)
     def _on_point_cloud_loaded(self, point_cloud, original_point_count):
         """Handle successful point cloud loading, receiving original count."""
+        self.control_panel.set_progress_visible(False)
         self.point_cloud = point_cloud
         self.original_point_count = original_point_count
         
@@ -334,7 +334,6 @@ class PCDVisualizer(QMainWindow):
         
     def _on_processing_finished(self):
         """Handle processing completion."""
-        self.control_panel.set_progress_visible(False)
         self.setEnabled(True)
         # Clean up thread
         if self.processor_thread:
@@ -343,6 +342,7 @@ class PCDVisualizer(QMainWindow):
         
     def _show_error(self, message: str):
         """Show error message."""
+        self.control_panel.set_progress_visible(False)
         QMessageBox.critical(self, "Error", message)
         self.status_bar.showMessage("Error occurred - Ready")
         

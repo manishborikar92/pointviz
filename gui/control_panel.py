@@ -136,6 +136,17 @@ class ControlPanel(QScrollArea):
         self.main_window._on_point_size_changed(value)
 
     # --- Public Panel API ---
+    def set_loading_file(self, file_path: str):
+        """Set the panel state to loading a file."""
+        p = Path(file_path)
+        self.file_name_label.setText(f"File: {p.name}")
+        try:
+            self.file_name_label.setToolTip(str(p.resolve()))
+        except Exception:
+            self.file_name_label.setToolTip(str(file_path))
+        self.file_label.setText(f"Loading: {p.name}")
+        self.file_label.setVisible(True)
+
     def update_file_info(self, file_path: Optional[str] = None, displayed_points: int = 0, original_points: int = 0):
         """Update file information labels and tooltip."""
         if file_path is None:

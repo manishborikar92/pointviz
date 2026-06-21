@@ -556,3 +556,52 @@ def test_invalid_file_removes_from_recent(qapp):
         visualizer._load_specific_file("completely_missing.pcd")
         
         mock_remove.assert_called_once_with("completely_missing.pcd")
+
+def test_set_loading_file_updates_labels(qapp):
+    from PyQt6.QtWidgets import QWidget
+    from gui.control_panel import ControlPanel
+    
+    with mock.patch('gui.control_panel.ControlPanel.init_ui'):
+        parent_widget = QWidget()
+        panel = ControlPanel(parent_widget)
+        
+        panel.file_name_label = mock.Mock()
+        panel.file_label = mock.Mock()
+        
+        panel.set_loading_file("some_directory/test_cloud.pcd")
+        
+        panel.file_name_label.setText.assert_called_once_with("File: test_cloud.pcd")
+        panel.file_label.setText.assert_called_once_with("Loading: test_cloud.pcd")
+        panel.file_label.setVisible.assert_called_once_with(True)
+
+def test_on_point_cloud_loaded_hides_progress(qapp):
+    with mock.patch('gui.main_window.PCDVisualizer.init_ui'), \
+         mock.patch('gui.main_window.PCDVisualizer.apply_theme'), \
+         mock.patch('gui.main_window.PCDVisualizer._update_statistics'), \
+         mock.patch('gui.pyvista_widget.PyVistaWidget.update_point_cloud'):
+        
+        visualizer = PCDVisualizer()
+        visualizer.control_panel = mock.Mock()
+        visualizer.status_bar = mock.Mock()
+        visualizer.pyvista_widget = mock.Mock()
+        
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(np.random.rand(10, 3))
+        
+        visualizer._on_point_cloud_loaded(pcd, 10)
+        
+        visualizer.control_panel.set_progress_visible.assert_called_once_with(False)
+
+def test_show_error_hides_progress_before_messagebox(qapp):
+    with mock.patch('gui.main_window.PCDVisualizer.init_ui'), \
+         mock.patch('gui.main_window.PCDVisualizer.apply_theme'), \
+         mock.patch('PyQt6.QtWidgets.QMessageBox.critical') as mock_critical:
+        
+        visualizer = PCDVisualizer()
+        visualizer.control_panel = mock.Mock()
+        visualizer.status_bar = mock.Mock()
+        
+        visualizer._show_error("Test failure message")
+        
+        visualizer.control_panel.set_progress_visible.assert_called_once_with(False)
+        mock_critical.assert_called_once_with(visualizer, "Error", "Test failure message")
