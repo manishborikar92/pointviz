@@ -44,7 +44,7 @@ class PyVistaWidget(QWidget):
         self.current_background = 'Gradient'
         self.show_normals = False
 
-        # Day 5: Working Set Clipping state
+        # Working Set Clipping state
         self.clipping_state = ClippingState()
         self._original_points = None
         self._original_colors = None
@@ -52,7 +52,7 @@ class PyVistaWidget(QWidget):
         self._original_bounds = None
         self._clip_mask = None               # Current boolean mask
 
-        # Day 5: Measurement state
+        # Measurement state
         self.measurement_manager = MeasurementManager()
         self._pending_marker_actor = None    # Actor for Point A marker during picking
         
@@ -148,7 +148,7 @@ class PyVistaWidget(QWidget):
                 self.reset_camera()
                 self.set_view("default")
 
-            # Day 5: Build KD-tree for measurement snapping
+            # Build KD-tree for measurement snapping
             self.measurement_manager.build_index(point_cloud)
         
     def render_point_cloud(self):
@@ -532,7 +532,7 @@ class PyVistaWidget(QWidget):
             logger.warning(f"Warning during PyVista cleanup: {e}")
 
     # ================================================================
-    # Day 5: Working Set Clipping
+    # Working Set Clipping
     # ================================================================
 
     def enable_clipping(self) -> bool:
@@ -547,7 +547,7 @@ class PyVistaWidget(QWidget):
             widget = self.plotter.add_box_widget(
                 callback=self._on_box_clip,
                 bounds=bounds,
-                rotation_enabled=False,  # AABB only for Day 5
+                rotation_enabled=False,  # AABB only
             )
             widget.SetHandleSize(0.005)
             self._box_widget = widget
@@ -717,7 +717,7 @@ class PyVistaWidget(QWidget):
                 pass
 
     # ================================================================
-    # Day 5: Measurement
+    # Measurement
     # ================================================================
 
     def enable_measurement(self) -> bool:

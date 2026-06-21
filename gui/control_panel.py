@@ -30,7 +30,7 @@ class ControlPanel(QScrollArea):
         # Camera controls
         layout.addWidget(self._create_camera_group())
         
-        # Day 5: Tools (Clipping & Measurement)
+        # Tools (Clipping & Measurement)
         layout.addWidget(self._create_tools_group())
         
         # Add stretch to push everything to top
@@ -134,7 +134,7 @@ class ControlPanel(QScrollArea):
         return camera_group
 
     def _create_tools_group(self) -> QGroupBox:
-        """Create the Day 5 Tools group: clipping and measurement controls."""
+        """Create the Tools group: clipping and measurement controls."""
         tools_group = QGroupBox("Tools")
         tools_layout = QGridLayout()
 
@@ -266,7 +266,7 @@ class ControlPanel(QScrollArea):
         """Set normals checkbox checked state."""
         self.normals_checkbox.setChecked(checked)
 
-    # --- Day 5: Tools API ---
+    # --- Tools API ---
 
     def set_tools_enabled(self, enabled: bool):
         """Enable or disable tools controls (requires loaded point cloud)."""

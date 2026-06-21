@@ -13,7 +13,7 @@ def setup_menus(window):
     view_menu = menubar.addMenu('View')
     _add_view_menu_actions(window, view_menu)
     
-    # Tools menu (Day 5)
+    # Tools menu
     tools_menu = menubar.addMenu('Tools')
     _add_tools_menu_actions(window, tools_menu)
     
@@ -69,7 +69,7 @@ def _add_help_menu_actions(window, help_menu):
     _add_menu_actions(window, help_menu, actions)
 
 def _add_tools_menu_actions(window, tools_menu):
-    """Add actions to tools menu (Day 5: Clipping & Measurement)."""
+    """Add actions to tools menu (Clipping & Measurement)."""
     actions = [
         ("Toggle Clipping Box", "Ctrl+B", window._on_toggle_clipping_shortcut),
         ("Reset Clipping", None, window._on_reset_clipping),

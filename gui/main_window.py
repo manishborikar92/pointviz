@@ -107,7 +107,7 @@ class PCDVisualizer(QMainWindow):
         setup_menus(self)
         self._setup_statusbar()
 
-        # Day 5: Wire clipping and measurement signals
+        # Wire clipping and measurement signals
         self.pyvista_widget.clipping_state_changed.connect(self._on_clipping_state_changed)
         self.pyvista_widget.measurement_completed.connect(self._on_measurement_completed)
         self.pyvista_widget.measurement_mode_changed.connect(self._on_measurement_mode_changed)
@@ -157,7 +157,7 @@ class PCDVisualizer(QMainWindow):
                 self._update_statistics()
 
     # ================================================================
-    # Day 5: Tools State Controller (Clipping & Measurement)
+    # Tools State Controller (Clipping & Measurement)
     # ================================================================
 
     def set_active_tool(self, tool: ActiveTool) -> bool:
@@ -604,7 +604,7 @@ class PCDVisualizer(QMainWindow):
         self.status_bar.showMessage(f"Displayed {displayed_count:,} of {original_point_count:,} points successfully")
         self._enable_point_cloud_controls(True)
 
-        # Day 5: Enable tools controls
+        # Enable tools controls
         self.control_panel.set_tools_enabled(True)
         
     def _on_processing_finished(self):
@@ -632,7 +632,7 @@ class PCDVisualizer(QMainWindow):
             self._clear_statistics()
             return
 
-        # Day 5: Use clipped subset for statistics if clipping is active
+        # Use clipped subset for statistics if clipping is active
         if self.pyvista_widget.clipping_state.is_active and hasattr(self.pyvista_widget, 'pv_cloud') and self.pyvista_widget.pv_cloud is not None:
             points = np.asarray(self.pyvista_widget.pv_cloud.points)
         else:
@@ -655,7 +655,7 @@ class PCDVisualizer(QMainWindow):
         
     def _get_basic_stats_text(self, points: np.ndarray) -> str:
         displayed_count = len(points)
-        # Day 5: Show clipping-aware stats
+        # Show clipping-aware stats
         if self.pyvista_widget.clipping_state.is_active:
             return f"""Showing: {displayed_count:,} of {self.original_point_count:,} points (Clipped)
 Original Points:  {self.original_point_count:,}
