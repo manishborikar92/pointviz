@@ -22,8 +22,21 @@ A PyQt6-based desktop application for visualizing and inspecting 3D point cloud 
 
 ```
 pointviz/
-├── pcd_visualizer.py          # Complete application (entry point)
-├── requirements.txt           # Pinned Python dependencies
+├── pcd_visualizer.py          # Thin wrapper compatibility entry point
+├── main.py                    # Application entry point & configuration setup
+├── config.py                  # Centralized UI & performance configurations
+├── logger.py                  # Standard stdout & rotating file logger setup
+├── core/                      # Core processing and calculations
+│   ├── point_cloud_processor.py # Background QThread processing
+│   └── statistics.py          # Geometrical statistics calculations
+├── gui/                       # PyQt6 GUI views and sub-panels
+│   ├── main_window.py         # Shell container PCDVisualizer class
+│   ├── pyvista_widget.py      # Interactive 3D VTK viewer widget
+│   ├── control_panel.py       # Sidebar settings widget
+│   ├── visualization_panel.py # Main viewport tab container
+│   ├── theme_manager.py       # Light/dark stylesheet compiler
+│   ├── menus.py               # Menu bar construction
+│   └── dialogs.py             # Options & custom About dialogs
 ├── assets/
 │   ├── visualizer_icon.ico    # Application icon
 │   ├── logo_dark.png          # Dark theme logo
@@ -31,29 +44,20 @@ pointviz/
 ├── packaging/
 │   ├── build_visualizer.bat   # Windows build script (venv + PyInstaller + Inno Setup)
 │   ├── visualizer.spec        # PyInstaller specification
-│   └── visualizer_installer.iss  # Inno Setup installer configuration
+│   └── visualizer_installer.iss # Inno Setup installer configuration
+├── requirements.txt           # Pinned dependencies
 ├── LICENSE                    # Apache 2.0
 └── README.md
 ```
 
 ### Internal Architecture
 
-The application is contained in `pcd_visualizer.py` and is organized into four classes:
+The application is organized into modular directories and modules:
 
-| Class | Responsibility |
-|---|---|
-| `LoadOptionsDialog` | Modal dialog for voxel downsampling options on large files |
-| `PointCloudProcessor` | Background `QThread` for file loading, downsampling, and normal estimation |
-| `PyVistaWidget` | 3D rendering widget managing PyVista/VTK actors, color modes, and camera |
-| `PCDVisualizer` | Main `QMainWindow` — UI layout, controls, menus, theming, statistics, and file operations |
-
-Three standalone functions handle startup configuration:
-
-| Function | Purpose |
-|---|---|
-| `configure_environment()` | Sets environment variables for OpenGL/PyVista compatibility |
-| `configure_pyvista()` | Applies PyVista global theme settings |
-| `configure_opengl()` | Sets `QSurfaceFormat` defaults for depth/stencil buffers |
+- **Entry Point**: [pcd_visualizer.py](pcd_visualizer.py) is a thin wrapper that invokes [main.py](main.py).
+- **Configuration & Logging**: Centralized settings reside in [config.py](config.py), and log configurations are set up in [logger.py](logger.py).
+- **Core Processing**: Background threaded operations live in [core/point_cloud_processor.py](core/point_cloud_processor.py), while pure statistical calculations are extracted into [core/statistics.py](core/statistics.py).
+- **GUI Views**: Split into sub-components under `gui/`, with the main shell [gui/main_window.py](gui/main_window.py) connecting signals and coordinating panels.
 
 ## Installation
 

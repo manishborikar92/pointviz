@@ -13,7 +13,7 @@ pv.OFF_SCREEN = True
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from PyQt6.QtWidgets import QApplication
-from pcd_visualizer import PyVistaWidget
+from gui.pyvista_widget import PyVistaWidget
 
 def generate_dummy_pcd(filename, num_points=500000):
     print(f"Generating temporary point cloud with {num_points:,} points...")

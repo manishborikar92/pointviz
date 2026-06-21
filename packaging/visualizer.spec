@@ -14,7 +14,6 @@ datas = [
     ('../assets', 'assets')
 ]
 
-# Hidden imports for PyInstaller to find all necessary modules
 hiddenimports = [
     # GUI frameworks
     'PyQt6.QtCore',
@@ -43,6 +42,21 @@ hiddenimports = [
     'typing',
     # Settings and configuration
     'PyQt6.QtCore.QSettings',
+    # Application modules
+    'config',
+    'logger',
+    'main',
+    'core',
+    'core.point_cloud_processor',
+    'core.statistics',
+    'gui',
+    'gui.pyvista_widget',
+    'gui.dialogs',
+    'gui.theme_manager',
+    'gui.menus',
+    'gui.control_panel',
+    'gui.visualization_panel',
+    'gui.main_window',
 ]
 
 # Binaries to exclude (to reduce final executable size)
