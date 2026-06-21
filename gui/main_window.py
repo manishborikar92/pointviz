@@ -17,17 +17,26 @@ from core.point_cloud_processor import PointCloudProcessor
 import core.statistics as statistics
 from gui.control_panel import ControlPanel
 from gui.visualization_panel import VisualizationPanel
+from enum import Enum
 from gui.dialogs import AboutDialog, LoadOptionsDialog
 from gui.menus import setup_menus
 from gui.theme_manager import apply_theme
+
+class ActiveTool(Enum):
+    NONE = 0
+    CLIPPING = 1
+    MEASURING = 2
 
 class PCDVisualizer(QMainWindow):
     """Main application window for PCD visualization."""
     
     def __init__(self, initial_file_path: Optional[str] = None):
         super().__init__()
-        self.point_cloud = None
+        self.original_point_cloud = None
+        self.working_point_cloud = None
+        self.current_file_path = None
         self.original_point_count = 0
+        self.active_tool = ActiveTool.NONE
         self.processor_thread = None
         self.settings = QSettings('PCDVisualizer', 'Settings')
         self.initial_file_path = initial_file_path
@@ -43,6 +52,14 @@ class PCDVisualizer(QMainWindow):
             # Use QTimer to load file after UI is fully initialized
             QTimer.singleShot(100, self._load_initial_file)
         
+    @property
+    def point_cloud(self):
+        return self.working_point_cloud
+
+    @point_cloud.setter
+    def point_cloud(self, value):
+        self.working_point_cloud = value
+
     def _get_system_theme_preference(self) -> bool:
         """Detect system theme preference."""
         try:
@@ -89,6 +106,12 @@ class PCDVisualizer(QMainWindow):
         # Setup menus and status bar
         setup_menus(self)
         self._setup_statusbar()
+
+        # Day 5: Wire clipping and measurement signals
+        self.pyvista_widget.clipping_state_changed.connect(self._on_clipping_state_changed)
+        self.pyvista_widget.measurement_completed.connect(self._on_measurement_completed)
+        self.pyvista_widget.measurement_mode_changed.connect(self._on_measurement_mode_changed)
+        self.pyvista_widget.measurement_failed.connect(self._on_measurement_failed)
         
     def _center_window(self):
         """Center the window on the screen."""
@@ -132,6 +155,248 @@ class PCDVisualizer(QMainWindow):
             self.pyvista_widget.toggle_normals_display(show)
             if not had_normals and self.point_cloud.has_normals():
                 self._update_statistics()
+
+    # ================================================================
+    # Day 5: Tools State Controller (Clipping & Measurement)
+    # ================================================================
+
+    def set_active_tool(self, tool: ActiveTool) -> bool:
+        """Transition the active tool state transactionally and idempotently.
+        
+        Returns True if the transition was successful, False otherwise.
+        """
+        if self.active_tool == tool:
+            return True
+
+        logger.info(f"Transitioning tool state: {self.active_tool} -> {tool}")
+        old_tool = self.active_tool
+        has_cp = hasattr(self, 'control_panel') and self.control_panel is not None
+
+        # Deactivate current tool
+        if old_tool == ActiveTool.CLIPPING:
+            try:
+                self.pyvista_widget.disable_clipping()
+                if has_cp:
+                    self.control_panel.set_clipping_checked(False)
+            except Exception as e:
+                logger.error(f"Failed to disable clipping during transition: {e}")
+                
+        elif old_tool == ActiveTool.MEASURING:
+            try:
+                self.pyvista_widget.disable_measurement()
+                if has_cp:
+                    self.control_panel.set_measure_checked(False)
+                    self.control_panel.measure_btn.setText("Measure Distance")
+            except Exception as e:
+                logger.error(f"Failed to disable measurement during transition: {e}")
+
+        self.active_tool = ActiveTool.NONE
+
+        # Activate new tool
+        if tool == ActiveTool.CLIPPING:
+            try:
+                success = self.pyvista_widget.enable_clipping()
+                if success:
+                    self.active_tool = ActiveTool.CLIPPING
+                    if has_cp:
+                        self.control_panel.set_clipping_checked(True)
+                    return True
+                else:
+                    logger.error("Failed to enable clipping box widget")
+                    if has_cp:
+                        self.control_panel.set_clipping_checked(False)
+                    return False
+            except Exception as e:
+                logger.error(f"Exception enabling clipping: {e}", exc_info=True)
+                if has_cp:
+                    self.control_panel.set_clipping_checked(False)
+                return False
+
+        elif tool == ActiveTool.MEASURING:
+            try:
+                success = self.pyvista_widget.enable_measurement()
+                if success:
+                    self.active_tool = ActiveTool.MEASURING
+                    if has_cp:
+                        self.control_panel.set_measure_checked(True)
+                        self.control_panel.measure_btn.setText("Stop Measuring")
+                    return True
+                else:
+                    logger.error("Failed to enable measurement picker")
+                    if has_cp:
+                        self.control_panel.set_measure_checked(False)
+                        self.control_panel.measure_btn.setText("Measure Distance")
+                    return False
+            except Exception as e:
+                logger.error(f"Exception enabling measurement: {e}", exc_info=True)
+                if has_cp:
+                    self.control_panel.set_measure_checked(False)
+                    self.control_panel.measure_btn.setText("Measure Distance")
+                return False
+
+        return True
+
+    def _on_clipping_toggled(self, checked: bool):
+        """Handle clipping checkbox toggle from control panel."""
+        if not self.point_cloud:
+            return
+        if checked:
+            self.set_active_tool(ActiveTool.CLIPPING)
+        else:
+            if self.active_tool == ActiveTool.CLIPPING:
+                self.set_active_tool(ActiveTool.NONE)
+
+    def _on_reset_clipping(self):
+        """Handle Reset Clipping button."""
+        if self.point_cloud and self.pyvista_widget.clipping_state.is_active:
+            self.pyvista_widget.reset_clipping()
+
+    def _on_reset_action(self):
+        """Handle context-sensitive reset button (Reset Clip Box or Reset Workspace)."""
+        is_cropped = False
+        if self.working_point_cloud is not None and self.original_point_cloud is not None:
+            is_cropped = len(self.working_point_cloud.points) < len(self.original_point_cloud.points)
+            
+        if is_cropped:
+            self._on_reset_workspace()
+        else:
+            self._on_reset_clipping()
+
+    def _on_reset_workspace(self):
+        """Restore working_point_cloud from original_point_cloud entirely in memory."""
+        if self.original_point_cloud is None:
+            return
+            
+        self.working_point_cloud = o3d.geometry.PointCloud(self.original_point_cloud)
+        self.original_point_count = len(self.working_point_cloud.points)
+        
+        # Completely rebuild visualizer state:
+        # 1. Update point cloud in widget (forces KD-tree index rebuild and renders)
+        self.pyvista_widget.update_point_cloud(self.working_point_cloud, force_refresh=True, reset_camera=False)
+        
+        # 2. Deactivate any active tools (clears clipping state and measurements)
+        self.set_active_tool(ActiveTool.NONE)
+        
+        # 3. Update stats
+        self._update_statistics()
+        
+        # 4. Update file info
+        if self.current_file_path:
+            p = Path(self.current_file_path)
+            self.setWindowTitle(f"{p.name} - {APP_NAME}")
+            self.control_panel.update_file_info(
+                file_path=self.current_file_path,
+                displayed_points=self.original_point_count,
+                original_points=self.original_point_count
+            )
+            
+        self.status_bar.showMessage("Workspace reset to original point cloud")
+
+    def _on_crop_clicked(self):
+        """Handle Crop Workspace button clicked."""
+        if not self.working_point_cloud or self.pyvista_widget._clip_mask is None:
+            return
+
+        # Crop commits the current clip region directly in memory
+        indices = np.where(self.pyvista_widget._clip_mask)[0]
+        self.working_point_cloud = self.working_point_cloud.select_by_index(indices)
+        self.original_point_count = len(self.working_point_cloud.points)
+        
+        # Update visualization - do NOT reset the camera
+        self.pyvista_widget.update_point_cloud(self.working_point_cloud, force_refresh=True, reset_camera=False)
+        
+        # Reset active tool to NONE to turn off the box widget and update controls
+        self.set_active_tool(ActiveTool.NONE)
+        
+        self._update_statistics()
+        
+        # Update control panel file info and window title
+        if self.current_file_path:
+            p = Path(self.current_file_path)
+            self.setWindowTitle(f"{p.name} [Cropped] - {APP_NAME}")
+            self.control_panel.update_file_info(
+                file_path=self.current_file_path,
+                displayed_points=self.original_point_count,
+                original_points=self.original_point_count
+            )
+            
+        self.status_bar.showMessage(f"Workspace cropped to {self.original_point_count:,} points")
+
+    def _on_toggle_clipping_shortcut(self):
+        """Handle Ctrl+B keyboard shortcut for clipping toggle."""
+        if not self.point_cloud:
+            return
+        current = self.active_tool == ActiveTool.CLIPPING
+        if current:
+            self.set_active_tool(ActiveTool.NONE)
+        else:
+            self.set_active_tool(ActiveTool.CLIPPING)
+
+    def _on_clipping_state_changed(self, state):
+        """Handle clipping state change signal from PyVistaWidget."""
+        self.control_panel.update_clipping_info(state.summary)
+        if state.is_active:
+            self.status_bar.showMessage(state.summary)
+        else:
+            if self.point_cloud:
+                count = len(self.point_cloud.points)
+                self.status_bar.showMessage(f"Displayed {count:,} points")
+        self._update_statistics()
+
+    def _on_measure_toggled(self, checked: bool):
+        """Handle Measure Distance button toggle from control panel."""
+        if not self.point_cloud:
+            return
+        if checked:
+            self.set_active_tool(ActiveTool.MEASURING)
+        else:
+            if self.active_tool == ActiveTool.MEASURING:
+                self.set_active_tool(ActiveTool.NONE)
+
+    def _on_toggle_measure_shortcut(self):
+        """Handle Ctrl+M keyboard shortcut for measurement toggle."""
+        if not self.point_cloud:
+            return
+        current = self.active_tool == ActiveTool.MEASURING
+        if current:
+            self.set_active_tool(ActiveTool.NONE)
+        else:
+            self.set_active_tool(ActiveTool.MEASURING)
+
+    def _on_clear_measurements(self):
+        """Handle Clear All Measurements button."""
+        self.pyvista_widget.clear_measurements()
+        self.control_panel.set_clear_measurements_enabled(False)
+        self.status_bar.showMessage("All measurements cleared")
+
+    def _on_measurement_completed(self, measurement):
+        """Handle measurement completion signal from PyVistaWidget."""
+        self.control_panel.set_clear_measurements_enabled(True)
+
+    def _on_measurement_failed(self):
+        """Handle measurement failure signal by resetting the active tool state."""
+        self.set_active_tool(ActiveTool.NONE)
+
+    def _on_measurement_mode_changed(self, message: str):
+        """Handle measurement mode change signal (status bar updates)."""
+        if message:
+            self.status_bar.showMessage(message)
+        elif self.pyvista_widget.clipping_state.is_active:
+            self.status_bar.showMessage(self.pyvista_widget.clipping_state.summary)
+        elif self.point_cloud:
+            count = len(self.point_cloud.points)
+            self.status_bar.showMessage(f"Displayed {count:,} points")
+        else:
+            self.status_bar.showMessage("Ready - Load a point cloud file to begin")
+
+    def keyPressEvent(self, event):
+        """Handle key press events — ESC cancels active tools."""
+        if event.key() == Qt.Key.Key_Escape:
+            if self.active_tool != ActiveTool.NONE:
+                self.set_active_tool(ActiveTool.NONE)
+                self.status_bar.showMessage("Tool deactivated")
+                return
+        super().keyPressEvent(event)
     
     # Camera view methods
     def reset_view(self):
@@ -177,6 +442,9 @@ class PCDVisualizer(QMainWindow):
         if self.processor_thread and self.processor_thread.isRunning():
             QMessageBox.warning(self, "Warning", "A point cloud file is already loading. Please wait.")
             return
+
+        # Deactivate any active tool before loading a new file
+        self.set_active_tool(ActiveTool.NONE)
 
         p_file = Path(file_path)
         if not p_file.exists():
@@ -294,8 +562,12 @@ class PCDVisualizer(QMainWindow):
     def _on_point_cloud_loaded(self, point_cloud, original_point_count):
         """Handle successful point cloud loading, receiving original count."""
         self.control_panel.set_progress_visible(False)
-        self.point_cloud = point_cloud
+        self.original_point_cloud = point_cloud
+        self.working_point_cloud = o3d.geometry.PointCloud(point_cloud)
         self.original_point_count = original_point_count
+        self.current_file_path = None
+        if self.processor_thread and hasattr(self.processor_thread, 'file_path') and self.processor_thread.file_path:
+            self.current_file_path = self.processor_thread.file_path
         
         # Add to recent files if loaded from a file
         if self.processor_thread and hasattr(self.processor_thread, 'file_path') and self.processor_thread.file_path:
@@ -331,6 +603,9 @@ class PCDVisualizer(QMainWindow):
         # Update status and enable controls
         self.status_bar.showMessage(f"Displayed {displayed_count:,} of {original_point_count:,} points successfully")
         self._enable_point_cloud_controls(True)
+
+        # Day 5: Enable tools controls
+        self.control_panel.set_tools_enabled(True)
         
     def _on_processing_finished(self):
         """Handle processing completion."""
@@ -352,12 +627,16 @@ class PCDVisualizer(QMainWindow):
     
     # Statistics and calculations
     def _update_statistics(self):
-        """Update the statistics display."""
+        """Update the statistics display (clipping-aware)."""
         if not self.point_cloud:
             self._clear_statistics()
             return
-            
-        points = np.asarray(self.point_cloud.points)
+
+        # Day 5: Use clipped subset for statistics if clipping is active
+        if self.pyvista_widget.clipping_state.is_active and hasattr(self.pyvista_widget, 'pv_cloud') and self.pyvista_widget.pv_cloud is not None:
+            points = np.asarray(self.pyvista_widget.pv_cloud.points)
+        else:
+            points = np.asarray(self.point_cloud.points)
         
         # Format strings for stats
         basic_info = self._get_basic_stats_text(points)
@@ -376,6 +655,12 @@ class PCDVisualizer(QMainWindow):
         
     def _get_basic_stats_text(self, points: np.ndarray) -> str:
         displayed_count = len(points)
+        # Day 5: Show clipping-aware stats
+        if self.pyvista_widget.clipping_state.is_active:
+            return f"""Showing: {displayed_count:,} of {self.original_point_count:,} points (Clipped)
+Original Points:  {self.original_point_count:,}
+Dimensions: {points.shape}
+Memory (Displayed): {points.nbytes / 1024 / 1024:.2f} MB"""
         return f"""Displayed Points: {displayed_count:,}
 Original Points:  {self.original_point_count:,}
 Dimensions: {points.shape}
@@ -403,6 +688,9 @@ Has Covariances: {'Yes' if self.point_cloud.has_covariances() else 'No'}"""
         
         if self.point_cloud.has_colors():
             colors = np.asarray(self.point_cloud.colors)
+            if self.pyvista_widget.clipping_state.is_active and self.pyvista_widget._clip_mask is not None:
+                if len(colors) == len(self.pyvista_widget._clip_mask):
+                    colors = colors[self.pyvista_widget._clip_mask]
             color_stats = statistics.compute_color_stats(colors)
             features_info += f"""
 
@@ -431,6 +719,9 @@ Z: μ={coord_stats['z']['mean']:.6f}, σ={coord_stats['z']['std']:.6f}"""
         
         if self.point_cloud.has_normals():
             normals = np.asarray(self.point_cloud.normals)
+            if self.pyvista_widget.clipping_state.is_active and self.pyvista_widget._clip_mask is not None:
+                if len(normals) == len(self.pyvista_widget._clip_mask):
+                    normals = normals[self.pyvista_widget._clip_mask]
             avg_magnitude = np.linalg.norm(normals, axis=1).mean()
             additional_info += f"""
 

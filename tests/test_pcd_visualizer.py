@@ -12,12 +12,17 @@ from PyQt6.QtGui import QPalette, QColor
 # Add workspace to path to import flat packages
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from config import MAX_RECENT_FILES
 from main import configure_environment
 from core.point_cloud_processor import PointCloudProcessor
 from gui.pyvista_widget import PyVistaWidget
-from gui.main_window import PCDVisualizer
+from gui.control_panel import ControlPanel
+from gui.main_window import PCDVisualizer, ActiveTool
 from gui.dialogs import LoadOptionsDialog, AboutDialog
 import core.statistics as stats
+from core.measurement import MeasurementMode
+
+from PyQt6.QtWidgets import QWidget
 
 @pytest.fixture(scope="session")
 def qapp():
@@ -368,7 +373,6 @@ def test_add_to_recent_files(qapp):
         assert stored_recent[0] == path1
         
         # Test max recent limit
-        from config import MAX_RECENT_FILES
         for i in range(MAX_RECENT_FILES + 5):
             visualizer._add_to_recent_files(f"limit_{i}.pcd")
         assert len(stored_recent) == MAX_RECENT_FILES
@@ -558,8 +562,6 @@ def test_invalid_file_removes_from_recent(qapp):
         mock_remove.assert_called_once_with("completely_missing.pcd")
 
 def test_set_loading_file_updates_labels(qapp):
-    from PyQt6.QtWidgets import QWidget
-    from gui.control_panel import ControlPanel
     
     with mock.patch('gui.control_panel.ControlPanel.init_ui'):
         parent_widget = QWidget()
@@ -605,3 +607,355 @@ def test_show_error_hides_progress_before_messagebox(qapp):
         
         visualizer.control_panel.set_progress_visible.assert_called_once_with(False)
         mock_critical.assert_called_once_with(visualizer, "Error", "Test failure message")
+
+def test_active_tool_transitions_and_repeated_toggles(qapp):
+    # Tests repeated enable/disable toggles, tool exclusivity, and transactional state
+    with mock.patch('gui.main_window.PCDVisualizer.init_ui'), \
+         mock.patch('gui.main_window.PCDVisualizer.apply_theme'):
+        visualizer = PCDVisualizer()
+        visualizer.point_cloud = o3d.geometry.PointCloud()
+        visualizer.point_cloud.points = o3d.utility.Vector3dVector(np.random.rand(10, 3))
+        
+        # Mock pyvista plotter and widget dependencies
+        visualizer.pyvista_widget = mock.Mock()
+        visualizer.pyvista_widget.pv_cloud = mock.Mock()
+        visualizer.pyvista_widget.clipping_state = mock.Mock()
+        visualizer.pyvista_widget.measurement_manager = mock.Mock()
+        
+        # Successful activations
+        visualizer.pyvista_widget.enable_clipping.return_value = True
+        visualizer.pyvista_widget.enable_measurement.return_value = True
+        
+        # 1. Enable clipping
+        assert visualizer.set_active_tool(ActiveTool.CLIPPING)
+        assert visualizer.active_tool == ActiveTool.CLIPPING
+        visualizer.pyvista_widget.enable_clipping.assert_called_once()
+        
+        # 2. Repeated enable clipping (should be idempotent)
+        visualizer.pyvista_widget.enable_clipping.reset_mock()
+        assert visualizer.set_active_tool(ActiveTool.CLIPPING)
+        visualizer.pyvista_widget.enable_clipping.assert_not_called()
+        
+        # 3. Toggle to measuring (clipping should deactivate first)
+        assert visualizer.set_active_tool(ActiveTool.MEASURING)
+        assert visualizer.active_tool == ActiveTool.MEASURING
+        visualizer.pyvista_widget.disable_clipping.assert_called_once()
+        visualizer.pyvista_widget.enable_measurement.assert_called_once()
+        
+        # 4. Deactivate (NONE)
+        assert visualizer.set_active_tool(ActiveTool.NONE)
+        assert visualizer.active_tool == ActiveTool.NONE
+        visualizer.pyvista_widget.disable_measurement.assert_called_once()
+
+def test_measurement_activation_failure_rollback(qapp):
+    # Tests that if enabling measurement fails, the UI falls back to idle immediately
+    with mock.patch('gui.main_window.PCDVisualizer.init_ui'), \
+         mock.patch('gui.main_window.PCDVisualizer.apply_theme'):
+        visualizer = PCDVisualizer()
+        visualizer.control_panel = mock.Mock()
+        visualizer.status_bar = mock.Mock()
+        visualizer.point_cloud = o3d.geometry.PointCloud()
+        visualizer.pyvista_widget = mock.Mock()
+        visualizer.pyvista_widget.enable_measurement.return_value = False
+        
+        # Attempt toggle
+        visualizer._on_measure_toggled(True)
+        
+        # Should reset control panel and active tool to NONE
+        assert visualizer.active_tool == ActiveTool.NONE
+        visualizer.control_panel.set_measure_checked.assert_called_with(False)
+
+def test_measurement_click_miss_handling(qapp):
+    # Tests that click misses trigger the measurement_failed signal and notify the UI
+    with mock.patch('gui.pyvista_widget.PyVistaWidget.setup_visualization'):
+        widget = PyVistaWidget()
+        widget.point_cloud_actor = mock.Mock()
+        
+        # Mock picker returning background click (where actor is None, indicating a miss)
+        mock_picker = mock.Mock()
+        mock_picker.GetActor.return_value = None
+        mock_picker.GetDataSet.return_value = None
+        mock_picker.GetPointId.return_value = -1
+        
+        widget.measurement_mode_changed = mock.Mock()
+        widget.measurement_failed = mock.Mock()
+        widget.measurement_manager = mock.Mock()
+        widget.measurement_manager.mode = MeasurementMode.PICKING_FIRST
+        
+        widget._on_point_picked([1, 1, 1], picker=mock_picker)
+        
+        # Click miss should emit message, emit failed signal, and NOT progress state
+        widget.measurement_mode_changed.emit.assert_called_with(
+            "Click miss - click directly on the point cloud (ESC to cancel)"
+        )
+        widget.measurement_failed.emit.assert_called_once()
+        widget.measurement_manager.set_first_point.assert_not_called()
+
+def test_measurement_failed_signal_deactivates_tool(qapp):
+    # Tests that measurement_failed signal transitions MainWindow to ActiveTool.NONE
+    with mock.patch('gui.main_window.PCDVisualizer.init_ui'), \
+         mock.patch('gui.main_window.PCDVisualizer.apply_theme'):
+        visualizer = PCDVisualizer()
+        visualizer.control_panel = mock.Mock()
+        visualizer.status_bar = mock.Mock()
+        visualizer.point_cloud = o3d.geometry.PointCloud()
+        
+        with mock.patch('gui.pyvista_widget.PyVistaWidget.setup_visualization'):
+            widget = PyVistaWidget()
+            visualizer.pyvista_widget = widget
+            
+            # Connect the signal in MainWindow
+            visualizer.pyvista_widget.measurement_failed.connect(visualizer._on_measurement_failed)
+            
+            # Set active tool to MEASURING
+            visualizer.active_tool = ActiveTool.MEASURING
+            
+            # Emit failed signal
+            visualizer.pyvista_widget.measurement_failed.emit()
+            
+            # Active tool should roll back to NONE
+            assert visualizer.active_tool == ActiveTool.NONE
+            visualizer.control_panel.set_measure_checked.assert_called_with(False)
+
+def test_measurement_state_recovery_on_deactivation_or_esc(qapp):
+    # Tests that ESC or deactivation successfully resets the measurement mode/manager
+    with mock.patch('gui.main_window.PCDVisualizer.init_ui'), \
+         mock.patch('gui.main_window.PCDVisualizer.apply_theme'):
+        visualizer = PCDVisualizer()
+        visualizer.control_panel = mock.Mock()
+        visualizer.status_bar = mock.Mock()
+        visualizer.pyvista_widget = mock.Mock()
+        visualizer.pyvista_widget.enable_measurement.return_value = True
+        
+        # 1. Activate measurement
+        visualizer.set_active_tool(ActiveTool.MEASURING)
+        assert visualizer.active_tool == ActiveTool.MEASURING
+        
+        # 2. Deactivate via ESC (ActiveTool.NONE)
+        visualizer.set_active_tool(ActiveTool.NONE)
+        assert visualizer.active_tool == ActiveTool.NONE
+        visualizer.pyvista_widget.disable_measurement.assert_called_once()
+
+def test_clipping_activation_deactivation(qapp):
+    # Tests that enabling/disabling clipping correctly updates state and plotter
+    with mock.patch('gui.pyvista_widget.PyVistaWidget.setup_visualization'):
+        widget = PyVistaWidget()
+        widget.plotter = mock.Mock()
+        widget.point_cloud_actor = mock.Mock()
+        widget.current_point_cloud = mock.Mock()
+        widget.pv_cloud = mock.Mock()
+        
+        # Setup original points and bounds
+        widget._original_points = np.random.rand(5, 3)
+        widget._original_bounds = (0, 1, 0, 1, 0, 1)
+        
+        # 1. Enable clipping
+        assert widget.enable_clipping()
+        assert widget.clipping_state.is_active
+        widget.plotter.add_box_widget.assert_called_once()
+        
+        # 2. Disable clipping
+        widget.disable_clipping()
+        assert not widget.clipping_state.is_active
+        widget.plotter.clear_box_widgets.assert_called()
+
+def test_clipping_widget_stability(qapp):
+    # Tests that clipping callback does not recreate or resize the box widget
+    with mock.patch('gui.pyvista_widget.PyVistaWidget.setup_visualization'):
+        widget = PyVistaWidget()
+        widget.plotter = mock.Mock()
+        widget.point_cloud_actor = mock.Mock()
+        widget.current_point_cloud = mock.Mock()
+        widget.pv_cloud = mock.Mock()
+        
+        # Setup original points and bounds
+        widget._original_points = np.random.rand(5, 3)
+        widget._original_bounds = (0, 1, 0, 1, 0, 1)
+        
+        # Enable clipping first (creates box widget once)
+        widget.enable_clipping()
+        widget.plotter.add_box_widget.assert_called_once()
+        
+        # Reset mock call count to verify no recreation in callback
+        widget.plotter.reset_mock()
+        
+        # Create mock box polydata representing user dragging the box widget
+        box_poly = mock.Mock()
+        box_poly.bounds = (0.1, 0.9, 0.1, 0.9, 0.1, 0.9)
+        
+        # Execute the callback
+        widget._on_box_clip(box_poly)
+        
+        # Verify that box widget is NOT cleared or re-added during interaction
+        widget.plotter.clear_box_widgets.assert_not_called()
+        widget.plotter.add_box_widget.assert_not_called()
+
+def test_crop_clicked_direct(qapp):
+    # Tests that _on_crop_clicked crops directly in-memory without a dialog,
+    # mutating working_point_cloud while leaving original_point_cloud intact.
+    with mock.patch('gui.main_window.PCDVisualizer.init_ui'), \
+         mock.patch('gui.main_window.PCDVisualizer.apply_theme'):
+        visualizer = PCDVisualizer()
+        visualizer.control_panel = mock.Mock()
+        visualizer.status_bar = mock.Mock()
+        visualizer._update_statistics = mock.Mock()
+        visualizer.current_file_path = "test.pcd"
+        
+        # Mock point cloud with 10 points
+        pts = np.zeros((10, 3))
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(pts)
+        
+        visualizer.original_point_cloud = pcd
+        visualizer.working_point_cloud = o3d.geometry.PointCloud(pcd)
+        visualizer.original_point_count = 10
+        
+        # Setup pyvista widget and clip mask (select first 3 points)
+        visualizer.pyvista_widget = mock.Mock()
+        visualizer.pyvista_widget._clip_mask = np.array([True, True, True, False, False, False, False, False, False, False])
+        
+        # Execute crop
+        visualizer._on_crop_clicked()
+        
+        # original_point_cloud MUST remain untouched (10 points)
+        assert len(visualizer.original_point_cloud.points) == 10
+        # working_point_cloud MUST be cropped (3 points)
+        assert len(visualizer.working_point_cloud.points) == 3
+        
+        visualizer.pyvista_widget.update_point_cloud.assert_called_once_with(
+            visualizer.working_point_cloud, force_refresh=True, reset_camera=False
+        )
+        assert visualizer.active_tool == ActiveTool.NONE
+        visualizer._update_statistics.assert_called_once()
+
+
+def test_reset_workspace(qapp):
+    # Tests that _on_reset_workspace restores working_point_cloud from original_point_cloud
+    with mock.patch('gui.main_window.PCDVisualizer.init_ui'), \
+         mock.patch('gui.main_window.PCDVisualizer.apply_theme'):
+        visualizer = PCDVisualizer()
+        visualizer.control_panel = mock.Mock()
+        visualizer.status_bar = mock.Mock()
+        visualizer._update_statistics = mock.Mock()
+        visualizer.current_file_path = "test.pcd"
+        
+        # Setup original point cloud (10 points) and cropped working point cloud (3 points)
+        pts_10 = np.zeros((10, 3))
+        pcd_orig = o3d.geometry.PointCloud()
+        pcd_orig.points = o3d.utility.Vector3dVector(pts_10)
+        
+        pts_3 = np.zeros((3, 3))
+        pcd_work = o3d.geometry.PointCloud()
+        pcd_work.points = o3d.utility.Vector3dVector(pts_3)
+        
+        visualizer.original_point_cloud = pcd_orig
+        visualizer.working_point_cloud = pcd_work
+        visualizer.original_point_count = 3
+        
+        visualizer.pyvista_widget = mock.Mock()
+        
+        # Execute Reset Workspace
+        visualizer._on_reset_workspace()
+        
+        # working_point_cloud MUST be restored to original (10 points)
+        assert len(visualizer.working_point_cloud.points) == 10
+        assert len(visualizer.original_point_cloud.points) == 10
+        
+        visualizer.pyvista_widget.update_point_cloud.assert_called_once_with(
+            visualizer.working_point_cloud, force_refresh=True, reset_camera=False
+        )
+        assert visualizer.active_tool == ActiveTool.NONE
+        visualizer._update_statistics.assert_called_once()
+
+
+def test_crop_crop_crop_reset_cycle(qapp):
+    # Tests that repeated Crop -> Crop -> Crop -> Reset correctly updates all arrays,
+    # KD-trees, clipping state, and measurement state without leaving stale references in memory.
+    with mock.patch('gui.main_window.PCDVisualizer.init_ui'), \
+         mock.patch('gui.main_window.PCDVisualizer.apply_theme'):
+        visualizer = PCDVisualizer()
+        visualizer.control_panel = mock.Mock()
+        visualizer.status_bar = mock.Mock()
+        visualizer._update_statistics = mock.Mock()
+        visualizer.current_file_path = "test.pcd"
+
+        # Initialize mock pyvista widget (we want real PyVistaWidget to test its state transitions)
+        with mock.patch('gui.pyvista_widget.PyVistaWidget.setup_visualization'):
+            widget = PyVistaWidget()
+            widget.plotter = mock.Mock()
+            visualizer.pyvista_widget = widget
+
+            # Build a dataset with 10 points, colors, and normals
+            pcd = o3d.geometry.PointCloud()
+            pcd.points = o3d.utility.Vector3dVector(np.arange(30).reshape(10, 3).astype(np.float64))
+            pcd.colors = o3d.utility.Vector3dVector(np.random.rand(10, 3))
+            pcd.estimate_normals() # estimates dummy normals
+
+            # Load it into visualizer
+            visualizer._on_point_loaded = mock.Mock() # mock unused helper
+            visualizer._on_point_cloud_loaded(pcd, 10)
+
+            # Check initial state
+            assert len(visualizer.original_point_cloud.points) == 10
+            assert len(visualizer.working_point_cloud.points) == 10
+            assert len(widget._original_points) == 10
+            assert widget._original_colors is not None
+            assert len(widget._original_colors) == 10
+            assert widget.measurement_manager._points_array is not None
+            assert len(widget.measurement_manager._points_array) == 10
+
+            # First Crop (keep points 0..7)
+            widget._clip_mask = np.array([True]*8 + [False]*2)
+            visualizer._on_crop_clicked()
+            assert len(visualizer.working_point_cloud.points) == 8
+            assert len(widget._original_points) == 8
+            assert len(widget._original_colors) == 8
+            assert len(widget.measurement_manager._points_array) == 8
+            assert widget._clip_mask is None
+
+            # Second Crop (keep points 0..5 of the current working cloud)
+            # Re-simulate clipping
+            widget._clip_mask = np.array([True]*6 + [False]*2)
+            visualizer._on_crop_clicked()
+            assert len(visualizer.working_point_cloud.points) == 6
+            assert len(widget._original_points) == 6
+            assert len(widget._original_colors) == 6
+            assert len(widget.measurement_manager._points_array) == 6
+
+            # Third Crop (keep points 0..3 of the current working cloud)
+            widget._clip_mask = np.array([True]*4 + [False]*2)
+            visualizer._on_crop_clicked()
+            assert len(visualizer.working_point_cloud.points) == 4
+            assert len(widget._original_points) == 4
+            assert len(widget._original_colors) == 4
+            assert len(widget.measurement_manager._points_array) == 4
+
+            # Verify original_point_cloud remains 10 points
+            assert len(visualizer.original_point_cloud.points) == 10
+
+            # Rebuild some mock measurements on the active working cloud
+            widget.measurement_manager.activate()
+            # Snap to a point
+            _, coord_a = widget.measurement_manager.snap_to_point(widget.measurement_manager._points_array[0])
+            widget.measurement_manager.set_first_point(coord_a)
+            _, coord_b = widget.measurement_manager.snap_to_point(widget.measurement_manager._points_array[1])
+            widget.measurement_manager.create_measurement(coord_a, coord_b)
+            assert widget.measurement_manager.has_measurements
+
+            # Reset Workspace
+            visualizer._on_reset_workspace()
+
+            # Verify working point cloud is fully restored to 10 points
+            assert len(visualizer.working_point_cloud.points) == 10
+            # original_points, colors, bounds, and KD-tree in widget are fully restored
+            assert len(widget._original_points) == 10
+            assert len(widget._original_colors) == 10
+            assert len(widget.measurement_manager._points_array) == 10
+            
+            # Verify measurements are completely cleared on reset
+            assert not widget.measurement_manager.has_measurements
+            # Verify clipping is deactivated
+            assert not widget.clipping_state.is_active
+            assert widget._clip_mask is None
+
+

@@ -94,6 +94,16 @@ STYLESHEET_TEMPLATE = """
     QMenu::item {{ padding: 8px 32px 8px 16px; }}
     QMenu::item:selected {{ background-color: #2a82da; color: #ffffff; }}
     QStatusBar {{ background-color: {bg_menubar}; color: {fg_main}; border-top: 1px solid {border_color}; }}
+
+    QLabel#clipping_info_label {{
+        color: {fg_main};
+        background-color: {bg_button};
+        border: 1px solid {border_color};
+        border-radius: 4px;
+        padding: 6px;
+        font-style: italic;
+    }}
+
 """
 
 def get_theme_stylesheet(is_dark: bool) -> str:
