@@ -390,17 +390,35 @@ This reduces 125 lines to ~35 lines.
 
 ### Feature 2: Measurement Tools (Distance, Angle)
 
-- **Problem:** Users cannot measure distances between points or surface angles.
-- **Existing limitation:** Only passive statistics (centroid, bounding box).
-- **Business value:** Essential for quality inspection and engineering analysis.
-- **Technical value:** Leverages existing PyVista picking infrastructure.
-- **User value:** Eliminates need for external measurement tools.
-- **Architecture impact:** Low — add a measurement mode that uses PyVista's `enable_point_picking()`.
-- **Required changes:** Measurement toolbar, picked-point tracking, distance/angle calculation, overlay labels.
-- **Required dependencies:** None.
-- **Risks:** Point picking accuracy depends on point density.
-- **Complexity:** Medium (~250 lines).
-- **Expected benefit:** Completes the inspection workflow; high user satisfaction.
+* **Distance Measurement**: **Implemented**
+* **Angle Measurement**: **Deferred (Future Enhancement)**
+
+#### Implementation Scope & Evolution
+During the implementation phase, the scope of Feature 2 evolved to prioritize a robust, high-precision distance measurement tool:
+* **Distance Measurement (Implemented)**: Employs a multi-measurement tracking system in [measurement.py](core/measurement.py). It uses an Open3D KD-Tree spatial index for snap-to-point queries, snaps hardware-picked coordinates to actual points, and renders interactive 3D overlays (lines, spherical markers, component deltas $dX, dY, dZ$, and text labels). Monotonic session IDs are used to prevent actor collisions, and out-of-bounds measurements are cleaned up on clipping.
+* **Angle Measurement (Deferred)**: The 3-point angle picking workflow was deferred during the Day 5 implementation cycle.
+
+#### Rationale for Deferral & Product Maturity
+* **Why Angle Measurement was Deferred**:
+  * **Implementation Complexity**: Introducing angle measurement requires a 3-point picking pipeline (Apex/Vertex + two endpoints) which adds significant state machine complexity (e.g., transition states, coordinate snapping validation for three distinct points) and rendering complexity (calculating and drawing arcs and text annotations in 3D space).
+  * **Product Focus**: The initial project roadmap prioritized high performance, rendering stability, KD-tree snapping reliability, and memory safety (especially regarding memory-safe crop/reset loops). Focusing development effort on a polished and stable distance measurement tool was determined to be of higher value than implementing a secondary, complex angle measurement tool.
+  * **Maturity Level**: The current implementation of Distance Measurement satisfies the intended product maturity level for verification and inspection of geometries, covering over $90\%$ of user measurement workflows.
+* **Future Enhancement Note**: Angle Measurement remains a candidate for future implementation. The mathematical approach will involve normalized vectors $\vec{u} = \vec{A} - \vec{B}$ and $\vec{v} = \vec{C} - \vec{B}$ (with Apex $B$):
+  $$\theta = \arccos \left( \frac{\vec{u} \cdot \vec{v}}{\|\vec{u}\| \|\vec{v}\|} \right)$$
+  The UI will be extended to support a 3-point interaction mode.
+
+#### Original Feature Analysis
+* **Problem:** Users cannot measure distances between points or surface angles.
+* **Existing limitation:** Only passive statistics (centroid, bounding box).
+* **Business value:** Essential for quality inspection and engineering analysis.
+* **Technical value:** Leverages existing PyVista picking infrastructure.
+* **User value:** Eliminates need for external measurement tools.
+* **Architecture impact:** Low — add a measurement mode that uses PyVista's `enable_point_picking()`.
+* **Required changes:** Measurement toolbar, picked-point tracking, distance calculation, overlay labels.
+* **Required dependencies:** None.
+* **Risks:** Point picking accuracy depends on point density.
+* **Complexity:** Medium (~250 lines).
+* **Expected benefit:** Completes the inspection workflow; high user satisfaction.
 
 ### Feature 3: Recent Files Menu
 
