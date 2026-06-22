@@ -72,3 +72,37 @@ def compute_coordinate_stats(points: np.ndarray) -> dict:
         "y": {"mean": float(points[:, 1].mean()), "std": float(points[:, 1].std())},
         "z": {"mean": float(points[:, 2].mean()), "std": float(points[:, 2].std())}
     }
+
+def calculate_adaptive_point_size(points: np.ndarray) -> int:
+    """Calculate adaptive point size based on point count and spatial extent."""
+    if len(points) == 0:
+        return 2 # Default point size
+    
+    n_points = len(points)
+    
+    # Base size based on point count (preserves current thresholds)
+    if n_points < 5000:
+        base_size = 5
+    elif n_points < 25000:
+        base_size = 3
+    elif n_points < 100000:
+        base_size = 2
+    else:
+        base_size = 1
+        
+    # Spatial extent refinement: if the cloud is very sparse (high bounding box diagonal
+    # relative to the density of points), scale up the point size to make it visible.
+    # Spacing is estimated by the diagonal divided by the cube root of the point count.
+    if n_points < 100000:
+        min_coords = points.min(axis=0)
+        max_coords = points.max(axis=0)
+        diagonal = float(np.linalg.norm(max_coords - min_coords))
+        
+        if diagonal > 0:
+            spacing = diagonal / (n_points ** (1 / 3))
+            if spacing > 2.0:
+                base_size = min(base_size + 2, 8)
+            elif spacing > 0.8:
+                base_size = min(base_size + 1, 8)
+                
+    return base_size

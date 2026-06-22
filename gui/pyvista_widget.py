@@ -15,7 +15,8 @@ from config import (
     DEFAULT_POINT_SIZE,
     MAX_NORMALS_DISPLAY,
     NORMAL_ESTIMATION_RADIUS,
-    NORMAL_ESTIMATION_MAX_NN
+    NORMAL_ESTIMATION_MAX_NN,
+    FALLBACK_POINT_COLOR
 )
 from logger import logger
 from core.clipping import ClippingMode, ClippingState, compute_obb_mask, apply_mask, get_cloud_bounds
@@ -293,7 +294,7 @@ class PyVistaWidget(QWidget):
         """Color points by Z coordinate (height)"""
         z_coords = points[:, 2]
         if z_coords.max() == z_coords.min():
-            return np.full((len(points), 3), [128, 128, 255], dtype=np.uint8)
+            return np.full((len(points), 3), FALLBACK_POINT_COLOR, dtype=np.uint8)
         z_norm = (z_coords - z_coords.min()) / (z_coords.max() - z_coords.min())
         colormap = plt.colormaps.get_cmap('viridis')
         colors = colormap(z_norm)[:, :3]
@@ -352,7 +353,7 @@ class PyVistaWidget(QWidget):
                 covs = covs[self._clip_mask]
                 
             if len(covs) == 0:
-                return np.full((len(points), 3), [128, 128, 255], dtype=np.uint8)
+                return np.full((len(points), 3), FALLBACK_POINT_COLOR, dtype=np.uint8)
             
             # Compute eigenvalues for each covariance matrix (sorted in ascending order)
             evs = np.linalg.eigvalsh(covs)
@@ -374,7 +375,7 @@ class PyVistaWidget(QWidget):
             return (colors * 255).astype(np.uint8)
         except Exception as e:
             logger.warning(f"Could not compute curvature: {e}")
-            return np.full((len(points), 3), [128, 128, 255], dtype=np.uint8)
+            return np.full((len(points), 3), FALLBACK_POINT_COLOR, dtype=np.uint8)
             
     def set_view(self, view_type: str):
         """Set specific camera view"""

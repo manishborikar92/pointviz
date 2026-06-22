@@ -1,15 +1,15 @@
 [Setup]
-AppId=PCDVisualizer
-AppName=PCD Visualizer
-AppVersion=1.0
-UninstallDisplayName=PCD Visualizer
-UninstallDisplayIcon={app}\PCDVisualizer.exe
-AppPublisher=Quantnueral Pvt. Ltd.
-DefaultDirName={autopf}\PCDVisualizer
-DefaultGroupName=PCD Visualizer
+AppId={#ExecutableName}
+AppName={#AppName}
+AppVersion={#AppVersion}
+UninstallDisplayName={#AppName}
+UninstallDisplayIcon={app}\{#ExecutableName}.exe
+AppPublisher={#AppPublisher}
+DefaultDirName={autopf}\{#ExecutableName}
+DefaultGroupName={#AppName}
 AllowNoIcons=yes
 OutputDir=..\dist
-OutputBaseFilename=PCDVisualizer_Setup_v1.0
+OutputBaseFilename={#InstallerBaseName}_v{#AppVersion}
 SetupIconFile=..\assets\visualizer_icon.ico
 Compression=lzma2
 SolidCompression=yes
@@ -29,38 +29,38 @@ Name: "desktopicon"; Description: "Create desktop shortcut"; GroupDescription: "
 
 [Files]
 ; Main executable
-Source: "..\dist\PCDVisualizer.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\{#ExecutableName}.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 ; Start Menu shortcuts
-Name: "{group}\PCD Visualizer"; Filename: "{app}\PCDVisualizer.exe"; IconFilename: "{app}\PCDVisualizer.exe"
-Name: "{group}\{cm:UninstallProgram,PCD Visualizer}"; Filename: "{uninstallexe}"
+Name: "{group}\{#AppName}"; Filename: "{app}\{#ExecutableName}.exe"; IconFilename: "{app}\{#ExecutableName}.exe"
+Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
 
 ; Desktop shortcuts
-Name: "{autodesktop}\PCD Visualizer"; Filename: "{app}\PCDVisualizer.exe"; Tasks: desktopicon; IconFilename: "{app}\PCDVisualizer.exe"
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#ExecutableName}.exe"; Tasks: desktopicon; IconFilename: "{app}\{#ExecutableName}.exe"
 
 [Registry]
 ; File associations for .pcd files
 Root: HKCR; Subkey: ".pcd"; ValueType: string; ValueName: ""; ValueData: "PCDFileVisualizer"; Flags: uninsdeletevalue
 Root: HKCR; Subkey: "PCDFileVisualizer"; ValueType: string; ValueName: ""; ValueData: "Point Cloud Data File"; Flags: uninsdeletekey
-Root: HKCR; Subkey: "PCDFileVisualizer\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\PCDVisualizer.exe,0"
-Root: HKCR; Subkey: "PCDFileVisualizer\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\PCDVisualizer.exe"" ""%1"""
+Root: HKCR; Subkey: "PCDFileVisualizer\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#ExecutableName}.exe,0"
+Root: HKCR; Subkey: "PCDFileVisualizer\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#ExecutableName}.exe"" ""%1"""
 
 ; File associations for .ply files
 Root: HKCR; Subkey: ".ply"; ValueType: string; ValueName: ""; ValueData: "PLYFileVisualizer"; Flags: uninsdeletevalue
 Root: HKCR; Subkey: "PLYFileVisualizer"; ValueType: string; ValueName: ""; ValueData: "Polygon File Format"; Flags: uninsdeletekey
-Root: HKCR; Subkey: "PLYFileVisualizer\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\PCDVisualizer.exe,0"
-Root: HKCR; Subkey: "PLYFileVisualizer\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\PCDVisualizer.exe"" ""%1"""
+Root: HKCR; Subkey: "PLYFileVisualizer\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#ExecutableName}.exe,0"
+Root: HKCR; Subkey: "PLYFileVisualizer\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#ExecutableName}.exe"" ""%1"""
 
 [Run]
-Filename: "{app}\PCDVisualizer.exe"; Description: "{cm:LaunchProgram,PCD Visualizer}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#ExecutableName}.exe"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
 
 [Code]
 function InitializeSetup(): Boolean;
 begin
   Result := True;
   if not IsWin64 then begin
-    MsgBox('PCD Visualizer requires a 64-bit version of Windows.', mbError, MB_OK);
+    MsgBox('{#AppName} requires a 64-bit version of Windows.', mbError, MB_OK);
     Result := False;
   end;
 end;

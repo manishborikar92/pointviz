@@ -258,6 +258,20 @@ def test_adaptive_point_size(qapp):
         visualizer._on_point_cloud_loaded(pcd2, 120000)
         visualizer.control_panel.set_point_size_value.assert_called_with(1)
 
+def test_calculate_adaptive_point_size():
+    # Test case 1: Empty point cloud
+    empty_pts = np.zeros((0, 3))
+    assert stats.calculate_adaptive_point_size(empty_pts) == 2
+    
+    # Test case 2: Small sparse cloud (e.g. 1000 points, large diagonal)
+    sparse_pts = np.random.rand(1000, 3) * 100.0
+    size = stats.calculate_adaptive_point_size(sparse_pts)
+    assert 6 <= size <= 8
+    
+    # Test case 3: Small dense cloud (e.g. 1000 points, diagonal of 1.0)
+    dense_pts = np.random.rand(1000, 3)
+    assert stats.calculate_adaptive_point_size(dense_pts) == 5
+
 def test_background_export(qapp):
     # Verify background threaded export initiates correctly
     with mock.patch('gui.main_window.PCDVisualizer.init_ui'), \

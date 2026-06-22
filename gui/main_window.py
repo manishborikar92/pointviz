@@ -11,7 +11,11 @@ from PyQt6.QtGui import QAction, QIcon, QPalette, QColor
 
 import open3d as o3d
 
-from config import LARGE_FILE_THRESHOLD_MB, ICON_PATH, APP_NAME, MAX_RECENT_FILES
+from config import (
+    LARGE_FILE_THRESHOLD_MB, ICON_PATH, APP_NAME, MAX_RECENT_FILES, ORGANIZATION_NAME,
+    LOAD_FILE_FILTER, SAVE_FILE_FILTER, SCREENSHOT_FILE_FILTER,
+    DEFAULT_EXPORT_FILENAME, DEFAULT_SCREENSHOT_FILENAME
+)
 from logger import logger
 from core.point_cloud_processor import PointCloudProcessor
 import core.statistics as statistics
@@ -38,7 +42,7 @@ class PCDVisualizer(QMainWindow):
         self.original_point_count = 0
         self.active_tool = ActiveTool.NONE
         self.processor_thread = None
-        self.settings = QSettings('PCDVisualizer', 'Settings')
+        self.settings = QSettings(ORGANIZATION_NAME, APP_NAME)
         self.initial_file_path = initial_file_path
         
         # Initialize theme
@@ -441,8 +445,7 @@ class PCDVisualizer(QMainWindow):
     def load_file(self):
         """Load point cloud file."""
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Open Point Cloud File", "", 
-            "Point Cloud Data (*.pcd *.ply);;PCD Files (*.pcd);;PLY Files (*.ply);;All Files (*)"
+            self, "Open Point Cloud File", "", LOAD_FILE_FILTER
         )
         
         if file_path:
@@ -508,8 +511,7 @@ class PCDVisualizer(QMainWindow):
             return
             
         file_path, _ = QFileDialog.getSaveFileName(
-            self, "Export Point Cloud", "exported_cloud.pcd",
-            "PCD Files (*.pcd);;PLY Files (*.ply);;All Files (*)"
+            self, "Export Point Cloud", DEFAULT_EXPORT_FILENAME, SAVE_FILE_FILTER
         )
         
         if not file_path:
@@ -563,8 +565,7 @@ class PCDVisualizer(QMainWindow):
             return
             
         file_path, _ = QFileDialog.getSaveFileName(
-            self, "Save Screenshot", "screenshot.png",
-            "PNG Files (*.png);;JPEG Files (*.jpg);;All Files (*)"
+            self, "Save Screenshot", DEFAULT_SCREENSHOT_FILENAME, SCREENSHOT_FILE_FILTER
         )
         
         if file_path:
@@ -601,15 +602,9 @@ class PCDVisualizer(QMainWindow):
             )
         
         displayed_count = len(point_cloud.points)
-        # Determine adaptive point size based on count
-        if displayed_count < 5000:
-            suggested_size = 5
-        elif displayed_count < 25000:
-            suggested_size = 3
-        elif displayed_count < 100000:
-            suggested_size = 2
-        else:
-            suggested_size = 1
+        # Determine adaptive point size based on count and spatial bounds
+        points_np = np.asarray(point_cloud.points)
+        suggested_size = statistics.calculate_adaptive_point_size(points_np)
             
         self.control_panel.set_point_size_value(suggested_size)
         

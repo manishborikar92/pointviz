@@ -2,6 +2,7 @@ from pathlib import Path
 import open3d as o3d
 from PyQt6.QtCore import QThread, pyqtSignal
 from logger import logger
+from config import SUPPORTED_EXTENSIONS
 
 class PointCloudProcessor(QThread):
     """Thread for processing point cloud operations with downsampling and export."""
@@ -31,11 +32,12 @@ class PointCloudProcessor(QThread):
                 # Load the full point cloud
                 file_ext = Path(self.file_path).suffix.lower()
                 
-                if file_ext in ['.pcd', '.ply']:
+                if file_ext in SUPPORTED_EXTENSIONS:
                     logger.debug(f"Reading point cloud file: {self.file_path}")
                     pcd = o3d.io.read_point_cloud(self.file_path)
                 else:
-                    raise ValueError(f"Unsupported file format: {file_ext}. Supported formats: .pcd, .ply")
+                    supported_formats_str = ", ".join(SUPPORTED_EXTENSIONS)
+                    raise ValueError(f"Unsupported file format: {file_ext}. Supported formats: {supported_formats_str}")
                 
                 if self.isInterruptionRequested():
                     logger.info("Operation interrupted after file read")

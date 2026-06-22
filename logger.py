@@ -3,9 +3,9 @@ import os
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from config import APP_NAME
+from config import LOGGER_NAME, LOG_SUBDIR, LOG_FILENAME, LOG_MAX_BYTES, LOG_BACKUP_COUNT
 
-logger = logging.getLogger("pointviz")
+logger = logging.getLogger(LOGGER_NAME)
 
 def setup_logging(level=logging.INFO):
     """Set up loggers for console output and a rotating log file in user home directory."""
@@ -24,14 +24,14 @@ def setup_logging(level=logging.INFO):
     
     # 2. File Handler
     try:
-        log_dir = Path.home() / ".pointviz"
+        log_dir = Path.home() / LOG_SUBDIR
         log_dir.mkdir(parents=True, exist_ok=True)
-        log_file = log_dir / "pointviz.log"
+        log_file = log_dir / LOG_FILENAME
         
         file_handler = RotatingFileHandler(
             log_file,
-            maxBytes=5 * 1024 * 1024,  # 5 MB
-            backupCount=3,
+            maxBytes=LOG_MAX_BYTES,
+            backupCount=LOG_BACKUP_COUNT,
             encoding='utf-8'
         )
         file_handler.setFormatter(formatter)
