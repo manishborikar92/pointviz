@@ -10,10 +10,15 @@ import time
 from core.clipping import (
     ClippingMode,
     ClippingState,
-    compute_box_mask,
+    compute_obb_mask,
     apply_mask,
     get_cloud_bounds,
 )
+
+
+def compute_box_mask(points, bounds, invert=False):
+    """Helper to route legacy AABB tests to compute_obb_mask with identity transform."""
+    return compute_obb_mask(points, np.identity(4), bounds, invert=invert)
 
 
 # --- Fixtures ---
@@ -103,10 +108,10 @@ class TestComputeBoxMask:
         assert mask.sum() == 0
 
     def test_single_point_bounds(self, sample_points):
-        # Bounds exactly at a single point
+        # Bounds exactly at a single point (degenerate case, should select all points)
         bounds = (1.0, 1.0, 1.0, 1.0, 1.0, 1.0)
         mask = compute_box_mask(sample_points, bounds)
-        assert mask.sum() == 1  # Only [1,1,1]
+        assert mask.all()
 
     def test_invert_flag(self, sample_points):
         bounds = (0.0, 1.0, 0.0, 1.0, 0.0, 1.0)
@@ -246,3 +251,129 @@ class TestClippingPerformance:
         assert mask.shape == (n_points,)
         # Should complete well under 100ms even for 500K
         assert elapsed_ms < 500, f"Mask computation took {elapsed_ms:.1f}ms for {n_points} points"
+
+
+# --- compute_obb_mask Tests ---
+
+class TestComputeObbMask:
+    def test_identity_rotation_equals_aabb(self, sample_points):
+        """Verify compute_obb_mask with identity transform yields identical results to compute_box_mask."""
+        from core.clipping import compute_obb_mask
+        bounds = (0.0, 1.5, 0.0, 1.0, 0.0, 1.0)
+        identity_transform = np.identity(4)
+
+        mask_aabb = compute_box_mask(sample_points, bounds)
+        mask_obb = compute_obb_mask(sample_points, identity_transform, bounds)
+
+        np.testing.assert_array_equal(mask_aabb, mask_obb)
+
+    def test_translation_masking(self, sample_points):
+        """Verify translation of oriented bounding box works correctly."""
+        from core.clipping import compute_obb_mask
+        # Box centered initially around [0.5, 0.5, 0.5] with bounds [0, 1, 0, 1, 0, 1]
+        bounds = (0.0, 1.0, 0.0, 1.0, 0.0, 1.0)
+        
+        # Translate the box by [1.0, 0.0, 0.0]
+        # Transform matrix represents local-to-world mapping, so a translation by [1, 0, 0]
+        transform = np.identity(4)
+        transform[0, 3] = 1.0
+
+        # Now the box in world coordinates is at [1, 2, 0, 1, 0, 1]
+        mask_obb = compute_obb_mask(sample_points, transform, bounds)
+        
+        # Check which points should be inside (X coordinates in [1.0, 2.0] inclusive)
+        # sample_points at:
+        # [1,0,0] (idx 1), [2,0,0] (idx 2), [1,1,0] (idx 4), [2,1,0] (idx 5), 
+        # [1,0,1] (idx 7), [2,0,1] (idx 8), [1,1,1] (idx 9)
+        expected_indices = [1, 2, 4, 5, 7, 8, 9]
+        actual_indices = np.where(mask_obb)[0].tolist()
+        assert set(actual_indices) == set(expected_indices)
+
+    def test_rotation_masking(self):
+        """Verify rotation of oriented bounding box works correctly."""
+        from core.clipping import compute_obb_mask
+        # Let's test a simple rotated box.
+        # Initial box bounds: [-1, 1, -1, 1, -1, 1]
+        bounds = (-1.0, 1.0, -1.0, 1.0, -1.0, 1.0)
+        
+        # Rotate by 45 degrees around Z axis
+        angle = np.radians(45.0)
+        c, s = np.cos(angle), np.sin(angle)
+        transform = np.identity(4)
+        transform[:2, :2] = [[c, -s], [s, c]]
+
+        # Points to test
+        points = np.array([
+            [0.0, 0.0, 0.0],    # Center: inside
+            [1.0, 0.0, 0.0],    # Corner in unrotated local: [cos(45), -sin(45)] in local which is inside
+            [1.5, 0.0, 0.0],    # Far along world X: outside (local is [1.5*cos(45), -1.5*sin(45)] = [1.06, -1.06] which is outside [-1, 1])
+            [1.41, 1.41, 0.0],  # Way outside
+        ])
+        
+        mask = compute_obb_mask(points, transform, bounds)
+        np.testing.assert_array_equal(mask, [True, True, False, False])
+
+    def test_degenerate_bounds_handling(self, sample_points):
+        """Verify degenerate box dimensions do not crash and fall back to all-True mask."""
+        from core.clipping import compute_obb_mask
+        transform = np.identity(4)
+        
+        # Zero width
+        bounds_zero_width = (1.0, 1.0, 0.0, 2.0, 0.0, 2.0)
+        mask = compute_obb_mask(sample_points, transform, bounds_zero_width)
+        assert mask.all()
+
+        # Zero height
+        bounds_zero_height = (0.0, 2.0, 1.0, 1.0, 0.0, 2.0)
+        mask = compute_obb_mask(sample_points, transform, bounds_zero_height)
+        assert mask.all()
+
+    def test_singular_matrix_handling(self, sample_points):
+        """Verify singular transform matrix falls back to all-True mask without crash."""
+        from core.clipping import compute_obb_mask
+        bounds = (0.0, 1.0, 0.0, 1.0, 0.0, 1.0)
+        
+        # Singular matrix (all zeros except one row/column)
+        singular_transform = np.zeros((4, 4))
+        mask = compute_obb_mask(sample_points, singular_transform, bounds)
+        assert mask.all()
+
+    def test_near_singular_matrix_fallback(self, sample_points):
+        """Verify near-singular/ill-conditioned or non-finite transform matrix falls back to all-True mask."""
+        from core.clipping import compute_obb_mask
+        bounds = (0.0, 1.0, 0.0, 1.0, 0.0, 1.0)
+        
+        # Scale one dimension to near-zero (ill-conditioned)
+        ill_conditioned_transform = np.identity(4)
+        ill_conditioned_transform[0, 0] = 1e-15
+        
+        mask = compute_obb_mask(sample_points, ill_conditioned_transform, bounds)
+        assert mask.all()
+
+        # Matrix with NaN
+        nan_transform = np.identity(4)
+        nan_transform[0, 0] = np.nan
+        mask = compute_obb_mask(sample_points, nan_transform, bounds)
+        assert mask.all()
+
+    def test_empty_points(self):
+        """Verify empty points input returns empty boolean mask."""
+        from core.clipping import compute_obb_mask
+        points = np.empty((0, 3))
+        transform = np.identity(4)
+        bounds = (-1, 1, -1, 1, -1, 1)
+        mask = compute_obb_mask(points, transform, bounds)
+        assert len(mask) == 0
+        assert mask.dtype == bool
+
+    def test_invert_flag(self, sample_points):
+        """Verify invert flag returns the complement mask."""
+        from core.clipping import compute_obb_mask
+        bounds = (0.0, 1.0, 0.0, 1.0, 0.0, 1.0)
+        transform = np.identity(4)
+        
+        mask_normal = compute_obb_mask(sample_points, transform, bounds, invert=False)
+        mask_inverted = compute_obb_mask(sample_points, transform, bounds, invert=True)
+        
+        np.testing.assert_array_equal(mask_normal, ~mask_inverted)
+

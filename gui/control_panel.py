@@ -147,43 +147,49 @@ class ControlPanel(QScrollArea):
         self.clipping_checkbox.setEnabled(False)
         tools_layout.addWidget(self.clipping_checkbox, 1, 0, 1, 2)
 
+        self.rotation_checkbox = QCheckBox("Enable Rotation")
+        self.rotation_checkbox.setChecked(True)
+        self.rotation_checkbox.setEnabled(False)
+        self.rotation_checkbox.toggled.connect(self.main_window._on_rotation_toggled)
+        tools_layout.addWidget(self.rotation_checkbox, 2, 0, 1, 2)
+
         self.reset_clip_btn = QPushButton("Reset Clip Box")
         self.reset_clip_btn.clicked.connect(self.main_window._on_reset_action)
         self.reset_clip_btn.setEnabled(False)
-        tools_layout.addWidget(self.reset_clip_btn, 2, 0, 1, 2)
+        tools_layout.addWidget(self.reset_clip_btn, 3, 0, 1, 2)
 
         self.crop_btn = QPushButton("Crop Workspace")
         self.crop_btn.clicked.connect(self.main_window._on_crop_clicked)
         self.crop_btn.setEnabled(False)
-        tools_layout.addWidget(self.crop_btn, 3, 0, 1, 2)
+        tools_layout.addWidget(self.crop_btn, 4, 0, 1, 2)
 
         self.clipping_info_label = QLabel("")
         self.clipping_info_label.setObjectName("clipping_info_label")
         self.clipping_info_label.setWordWrap(True)
         self.clipping_info_label.setVisible(False)
-        tools_layout.addWidget(self.clipping_info_label, 4, 0, 1, 2)
+        tools_layout.addWidget(self.clipping_info_label, 5, 0, 1, 2)
 
         # --- Divider ---
         separator = QFrame()
         separator.setFrameShape(QFrame.Shape.HLine)
         separator.setFrameShadow(QFrame.Shadow.Sunken)
         separator.setStyleSheet("margin: 6px 0;")
-        tools_layout.addWidget(separator, 5, 0, 1, 2)
+        tools_layout.addWidget(separator, 6, 0, 1, 2)
 
         # --- Measurement Section ---
         measurement_title = QLabel("<b>Point-to-Point Measurement</b>")
-        tools_layout.addWidget(measurement_title, 6, 0, 1, 2)
+        tools_layout.addWidget(measurement_title, 7, 0, 1, 2)
 
         self.measure_btn = QPushButton("Measure Distance")
         self.measure_btn.setCheckable(True)
         self.measure_btn.toggled.connect(self.main_window._on_measure_toggled)
         self.measure_btn.setEnabled(False)
-        tools_layout.addWidget(self.measure_btn, 7, 0, 1, 2)
+        tools_layout.addWidget(self.measure_btn, 8, 0, 1, 2)
 
         self.clear_measurements_btn = QPushButton("Clear Measurements")
         self.clear_measurements_btn.clicked.connect(self.main_window._on_clear_measurements)
         self.clear_measurements_btn.setEnabled(False)
-        tools_layout.addWidget(self.clear_measurements_btn, 8, 0, 1, 2)
+        tools_layout.addWidget(self.clear_measurements_btn, 9, 0, 1, 2)
 
         tools_group.setLayout(tools_layout)
         return tools_group
@@ -271,9 +277,11 @@ class ControlPanel(QScrollArea):
     def set_tools_enabled(self, enabled: bool):
         """Enable or disable tools controls (requires loaded point cloud)."""
         self.clipping_checkbox.setEnabled(enabled)
+        self.rotation_checkbox.setEnabled(enabled)
         self.measure_btn.setEnabled(enabled)
         if not enabled:
             self.set_clipping_checked(False)
+            self.rotation_checkbox.setChecked(True)
             self.set_measure_checked(False)
             self.reset_clip_btn.setText("Reset Clip Box")
             self.reset_clip_btn.setEnabled(False)

@@ -23,7 +23,11 @@ class ClippingMode(Enum):
 class ClippingState:
     """Immutable snapshot of clipping configuration."""
     mode: ClippingMode = ClippingMode.DISABLED
-    bounds: Optional[Tuple[float, ...]] = None  # (xmin,xmax,ymin,ymax,zmin,zmax)
+    bounds: Optional[Tuple[float, ...]] = None  # (xmin,xmax,ymin,ymax,zmin,zmax) - keep for backward compatibility
+    transform_matrix: Optional[np.ndarray] = None  # 4x4 forward transform matrix
+    inverse_transform_matrix: Optional[np.ndarray] = None  # 4x4 inverse transform matrix
+    ref_bounds: Optional[Tuple[float, ...]] = None  # (xmin,xmax,ymin,ymax,zmin,zmax) in local coords
+    active_mask: Optional[np.ndarray] = None  # (N,) boolean mask of active points
     invert: bool = False
     clipped_count: int = 0
     original_count: int = 0
@@ -41,19 +45,22 @@ class ClippingState:
         return f"Showing {self.clipped_count:,} of {self.original_count:,} points"
 
 
-def compute_box_mask(
+def compute_obb_mask(
     points: np.ndarray,
-    bounds: Tuple[float, float, float, float, float, float],
+    transform_matrix: np.ndarray,
+    ref_bounds: Tuple[float, float, float, float, float, float],
     invert: bool = False,
 ) -> np.ndarray:
-    """Compute a boolean mask for axis-aligned bounding box clipping.
+    """Compute a boolean mask for oriented bounding box clipping.
 
     Parameters
     ----------
     points : np.ndarray
         (N, 3) array of point coordinates.
-    bounds : tuple of 6 floats
-        (xmin, xmax, ymin, ymax, zmin, zmax) defining the clip region.
+    transform_matrix : np.ndarray
+        (4, 4) forward transformation matrix from local to world coordinates.
+    ref_bounds : tuple of 6 floats
+        (xmin, xmax, ymin, ymax, zmin, zmax) defining the box in local coordinates.
     invert : bool
         If True, select points OUTSIDE the box instead of inside.
 
@@ -62,16 +69,37 @@ def compute_box_mask(
     np.ndarray
         (N,) boolean mask. True = point is in the selected region.
     """
-    xmin, xmax, ymin, ymax, zmin, zmax = bounds
+    if len(points) == 0:
+        return np.array([], dtype=bool)
+
+    # 1. Check for singular/ill-conditioned transform matrix
+    try:
+        cond = np.linalg.cond(transform_matrix)
+        if not np.isfinite(cond) or cond > 1e12:
+            return np.ones(len(points), dtype=bool)
+        m_inv = np.linalg.inv(transform_matrix)
+    except (np.linalg.LinAlgError, ValueError, TypeError):
+        # Fall back to selecting all points (True) if matrix is singular/non-invertible/invalid
+        return np.ones(len(points), dtype=bool)
+
+    # 3. Transform points using inverse matrix (Optimized: points @ R_inv.T + t_inv)
+    R_inv = m_inv[:3, :3]
+    t_inv = m_inv[:3, 3]
+    local_points = points @ R_inv.T + t_inv
+
+    # 4. Perform bounds check in local coordinate space
+    xmin, xmax, ymin, ymax, zmin, zmax = ref_bounds
+    if (xmax - xmin <= 1e-7) or (ymax - ymin <= 1e-7) or (zmax - zmin <= 1e-7):
+        return np.ones(len(points), dtype=bool)
+
     mask = (
-        (points[:, 0] >= xmin) & (points[:, 0] <= xmax) &
-        (points[:, 1] >= ymin) & (points[:, 1] <= ymax) &
-        (points[:, 2] >= zmin) & (points[:, 2] <= zmax)
+        (local_points[:, 0] >= xmin) & (local_points[:, 0] <= xmax) &
+        (local_points[:, 1] >= ymin) & (local_points[:, 1] <= ymax) &
+        (local_points[:, 2] >= zmin) & (local_points[:, 2] <= zmax)
     )
     if invert:
         mask = ~mask
     return mask
-
 
 def apply_mask(
     points: np.ndarray,

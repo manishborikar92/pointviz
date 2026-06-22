@@ -1,6 +1,7 @@
 import numpy as np
 import open3d as o3d
 import pyvista as pv
+import vtk
 from pyvistaqt import QtInteractor
 import matplotlib.pyplot as plt
 from typing import Optional, List
@@ -17,7 +18,7 @@ from config import (
     NORMAL_ESTIMATION_MAX_NN
 )
 from logger import logger
-from core.clipping import ClippingMode, ClippingState, compute_box_mask, apply_mask, get_cloud_bounds
+from core.clipping import ClippingMode, ClippingState, compute_obb_mask, apply_mask, get_cloud_bounds
 from core.measurement import MeasurementMode, MeasurementManager
 
 class PyVistaWidget(QWidget):
@@ -535,7 +536,7 @@ class PyVistaWidget(QWidget):
     # Working Set Clipping
     # ================================================================
 
-    def enable_clipping(self) -> bool:
+    def enable_clipping(self, rotation_enabled: bool = True, initial_transform: Optional[np.ndarray] = None) -> bool:
         """Activate the box clipping widget on the current point cloud."""
         if self.plotter is None or not hasattr(self, 'pv_cloud') or self.pv_cloud is None:
             return False
@@ -547,20 +548,57 @@ class PyVistaWidget(QWidget):
             widget = self.plotter.add_box_widget(
                 callback=self._on_box_clip,
                 bounds=bounds,
-                rotation_enabled=False,  # AABB only
+                rotation_enabled=rotation_enabled,
+                interaction_event='end',
             )
             widget.SetHandleSize(0.005)
             self._box_widget = widget
 
+            # Cache the initial reference bounds of the widget's box geometry
+            poly_init = vtk.vtkPolyData()
+            widget.GetPolyData(poly_init)
+            if poly_init.GetNumberOfPoints() >= 8:
+                pts_init = np.array([poly_init.GetPoint(i) for i in range(8)])
+                self._clip_ref_bounds = (
+                    float(pts_init[:, 0].min()), float(pts_init[:, 0].max()),
+                    float(pts_init[:, 1].min()), float(pts_init[:, 1].max()),
+                    float(pts_init[:, 2].min()), float(pts_init[:, 2].max())
+                )
+            else:
+                self._clip_ref_bounds = bounds
+
             # Update clipping state
+            identity = np.identity(4)
             self.clipping_state = ClippingState(
                 mode=ClippingMode.BOX,
                 bounds=bounds,
+                transform_matrix=identity.copy(),
+                inverse_transform_matrix=identity.copy(),
+                ref_bounds=self._clip_ref_bounds,
+                active_mask=np.ones(len(self._original_points), dtype=bool),
                 original_count=len(self._original_points),
                 clipped_count=len(self._original_points),
             )
-            self.clipping_state_changed.emit(self.clipping_state)
-            logger.info("Clipping box widget enabled")
+
+            # Apply initial transform if provided
+            if initial_transform is not None:
+                vtk_matrix = vtk.vtkMatrix4x4()
+                for i in range(4):
+                    for j in range(4):
+                        vtk_matrix.SetElement(i, j, initial_transform[i, j])
+                vtk_transform = vtk.vtkTransform()
+                vtk_transform.SetMatrix(vtk_matrix)
+                widget.SetTransform(vtk_transform)
+                
+                # Programmatic transform updates with interaction_event='end'
+                # do not trigger the VTK callback automatically, so we invoke it manually.
+                poly = vtk.vtkPolyData()
+                widget.GetPolyData(poly)
+                self._on_box_clip(poly)
+            else:
+                self.clipping_state_changed.emit(self.clipping_state)
+
+            logger.info(f"Clipping box widget enabled (rotation_enabled={rotation_enabled})")
             return True
         except Exception as e:
             logger.error(f"Could not enable clipping: {e}")
@@ -603,15 +641,32 @@ class PyVistaWidget(QWidget):
         Computes the boolean mask, filters points, updates rendering,
         rebuilds the KD-tree, and removes stale measurements.
         """
-        if self._original_points is None:
+        if self._original_points is None or self._box_widget is None:
             return
 
         try:
-            # Extract bounds from the box PolyData
-            box_bounds = box_polydata.bounds  # (xmin,xmax,ymin,ymax,zmin,zmax)
+            # Extract transform from the widget
+            transform = vtk.vtkTransform()
+            self._box_widget.GetTransform(transform)
+            matrix = transform.GetMatrix()
+
+            transform_matrix = np.identity(4)
+            for i in range(4):
+                for j in range(4):
+                    transform_matrix[i, j] = matrix.GetElement(i, j)
+
+            try:
+                cond = np.linalg.cond(transform_matrix)
+                if not np.isfinite(cond) or cond > 1e12:
+                    m_inv = np.identity(4)
+                else:
+                    m_inv = np.linalg.inv(transform_matrix)
+            except (np.linalg.LinAlgError, ValueError, TypeError):
+                m_inv = np.identity(4)
 
             # 1. Compute mask
-            mask = compute_box_mask(self._original_points, box_bounds)
+            from core.clipping import compute_obb_mask
+            mask = compute_obb_mask(self._original_points, transform_matrix, self._clip_ref_bounds)
             self._clip_mask = mask
 
             # 2. Filter points
@@ -623,7 +678,11 @@ class PyVistaWidget(QWidget):
                 self.pv_cloud = pv.PolyData()
                 self.clipping_state = ClippingState(
                     mode=ClippingMode.BOX,
-                    bounds=box_bounds,
+                    bounds=box_polydata.bounds,
+                    transform_matrix=transform_matrix,
+                    inverse_transform_matrix=m_inv,
+                    ref_bounds=self._clip_ref_bounds,
+                    active_mask=mask,
                     original_count=len(self._original_points),
                     clipped_count=0,
                 )
@@ -673,7 +732,11 @@ class PyVistaWidget(QWidget):
             # 6. Update clipping state
             self.clipping_state = ClippingState(
                 mode=ClippingMode.BOX,
-                bounds=box_bounds,
+                bounds=box_polydata.bounds,
+                transform_matrix=transform_matrix,
+                inverse_transform_matrix=m_inv,
+                ref_bounds=self._clip_ref_bounds,
+                active_mask=mask,
                 original_count=len(self._original_points),
                 clipped_count=len(filtered_points),
             )

@@ -81,6 +81,10 @@ class MeasurementManager:
         point_cloud : o3d.geometry.PointCloud
             The point cloud to index. Can be the full cloud or a clipped subset.
         """
+        if point_cloud is None or len(point_cloud.points) == 0:
+            self._kd_tree = None
+            self._points_array = np.zeros((0, 3))
+            return
         self._kd_tree = o3d.geometry.KDTreeFlann(point_cloud)
         self._points_array = np.asarray(point_cloud.points)
 
@@ -92,6 +96,10 @@ class MeasurementManager:
         points : np.ndarray
             (N, 3) point coordinates.
         """
+        if points is None or len(points) == 0:
+            self._kd_tree = None
+            self._points_array = np.zeros((0, 3))
+            return
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(points)
         self._kd_tree = o3d.geometry.KDTreeFlann(pcd)

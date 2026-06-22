@@ -195,7 +195,10 @@ class PCDVisualizer(QMainWindow):
         # Activate new tool
         if tool == ActiveTool.CLIPPING:
             try:
-                success = self.pyvista_widget.enable_clipping()
+                rot_enabled = True
+                if has_cp:
+                    rot_enabled = self.control_panel.rotation_checkbox.isChecked()
+                success = self.pyvista_widget.enable_clipping(rotation_enabled=rot_enabled)
                 if success:
                     self.active_tool = ActiveTool.CLIPPING
                     if has_cp:
@@ -244,6 +247,20 @@ class PCDVisualizer(QMainWindow):
             self.set_active_tool(ActiveTool.CLIPPING)
         else:
             if self.active_tool == ActiveTool.CLIPPING:
+                self.set_active_tool(ActiveTool.NONE)
+
+    def _on_rotation_toggled(self, checked: bool):
+        """Handle Enable Rotation checkbox toggled from control panel."""
+        if not self.point_cloud:
+            return
+        if self.active_tool == ActiveTool.CLIPPING:
+            current_transform = None
+            if self.pyvista_widget.clipping_state.is_active:
+                current_transform = self.pyvista_widget.clipping_state.transform_matrix
+
+            self.pyvista_widget.disable_clipping()
+            success = self.pyvista_widget.enable_clipping(rotation_enabled=checked, initial_transform=current_transform)
+            if not success:
                 self.set_active_tool(ActiveTool.NONE)
 
     def _on_reset_clipping(self):
