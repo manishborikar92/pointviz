@@ -1,6 +1,6 @@
 from pathlib import Path
 from typing import Optional
-from PyQt6.QtWidgets import (QScrollArea, QWidget, QVBoxLayout, QGroupBox, QLabel,
+from PyQt6.QtWidgets import (QScrollArea, QWidget, QVBoxLayout, QFrame, QGroupBox, QLabel,
                              QProgressBar, QPushButton, QSlider, QComboBox, QCheckBox, QGridLayout)
 from PyQt6.QtCore import Qt
 
@@ -29,6 +29,9 @@ class ControlPanel(QScrollArea):
         
         # Camera controls
         layout.addWidget(self._create_camera_group())
+        
+        # Tools (Clipping & Measurement)
+        layout.addWidget(self._create_tools_group())
         
         # Add stretch to push everything to top
         layout.addStretch()
@@ -130,6 +133,67 @@ class ControlPanel(QScrollArea):
         camera_group.setLayout(camera_layout)
         return camera_group
 
+    def _create_tools_group(self) -> QGroupBox:
+        """Create the Tools group: clipping and measurement controls."""
+        tools_group = QGroupBox("Tools")
+        tools_layout = QGridLayout()
+
+        # --- Clipping Section ---
+        clipping_title = QLabel("<b>Working Set Clipping</b>")
+        tools_layout.addWidget(clipping_title, 0, 0, 1, 2)
+
+        self.clipping_checkbox = QCheckBox("Enable Clip Box")
+        self.clipping_checkbox.toggled.connect(self.main_window._on_clipping_toggled)
+        self.clipping_checkbox.setEnabled(False)
+        tools_layout.addWidget(self.clipping_checkbox, 1, 0, 1, 2)
+
+        self.rotation_checkbox = QCheckBox("Enable Rotation")
+        self.rotation_checkbox.setChecked(True)
+        self.rotation_checkbox.setEnabled(False)
+        self.rotation_checkbox.toggled.connect(self.main_window._on_rotation_toggled)
+        tools_layout.addWidget(self.rotation_checkbox, 2, 0, 1, 2)
+
+        self.reset_clip_btn = QPushButton("Reset Clip Box")
+        self.reset_clip_btn.clicked.connect(self.main_window._on_reset_action)
+        self.reset_clip_btn.setEnabled(False)
+        tools_layout.addWidget(self.reset_clip_btn, 3, 0, 1, 2)
+
+        self.crop_btn = QPushButton("Crop Workspace")
+        self.crop_btn.clicked.connect(self.main_window._on_crop_clicked)
+        self.crop_btn.setEnabled(False)
+        tools_layout.addWidget(self.crop_btn, 4, 0, 1, 2)
+
+        self.clipping_info_label = QLabel("")
+        self.clipping_info_label.setObjectName("clipping_info_label")
+        self.clipping_info_label.setWordWrap(True)
+        self.clipping_info_label.setVisible(False)
+        tools_layout.addWidget(self.clipping_info_label, 5, 0, 1, 2)
+
+        # --- Divider ---
+        separator = QFrame()
+        separator.setFrameShape(QFrame.Shape.HLine)
+        separator.setFrameShadow(QFrame.Shadow.Sunken)
+        separator.setStyleSheet("margin: 6px 0;")
+        tools_layout.addWidget(separator, 6, 0, 1, 2)
+
+        # --- Measurement Section ---
+        measurement_title = QLabel("<b>Point-to-Point Measurement</b>")
+        tools_layout.addWidget(measurement_title, 7, 0, 1, 2)
+
+        self.measure_btn = QPushButton("Measure Distance")
+        self.measure_btn.setCheckable(True)
+        self.measure_btn.toggled.connect(self.main_window._on_measure_toggled)
+        self.measure_btn.setEnabled(False)
+        tools_layout.addWidget(self.measure_btn, 8, 0, 1, 2)
+
+        self.clear_measurements_btn = QPushButton("Clear Measurements")
+        self.clear_measurements_btn.clicked.connect(self.main_window._on_clear_measurements)
+        self.clear_measurements_btn.setEnabled(False)
+        tools_layout.addWidget(self.clear_measurements_btn, 9, 0, 1, 2)
+
+        tools_group.setLayout(tools_layout)
+        return tools_group
+
     def _on_point_size_slider_changed(self, value: int):
         """Update point size label internally and notify main window."""
         self.point_size_label.setText(str(value))
@@ -207,3 +271,67 @@ class ControlPanel(QScrollArea):
     def set_normals_checked(self, checked: bool):
         """Set normals checkbox checked state."""
         self.normals_checkbox.setChecked(checked)
+
+    # --- Tools API ---
+
+    def set_tools_enabled(self, enabled: bool):
+        """Enable or disable tools controls (requires loaded point cloud)."""
+        self.clipping_checkbox.setEnabled(enabled)
+        self.rotation_checkbox.setEnabled(enabled)
+        self.measure_btn.setEnabled(enabled)
+        if not enabled:
+            self.set_clipping_checked(False)
+            self.rotation_checkbox.setChecked(True)
+            self.set_measure_checked(False)
+            self.reset_clip_btn.setText("Reset Clip Box")
+            self.reset_clip_btn.setEnabled(False)
+            self.crop_btn.setEnabled(False)
+            self.clear_measurements_btn.setEnabled(False)
+            self.update_clipping_info("")
+        else:
+            self.update_reset_button_state()
+
+    def update_clipping_info(self, summary: str):
+        """Update the clipping info label text."""
+        self.clipping_info_label.setText(summary)
+        self.clipping_info_label.setVisible(bool(summary))
+        self.update_reset_button_state()
+
+    def update_reset_button_state(self):
+        """Update the context-sensitive Reset button based on crop and clipping states."""
+        is_cropped = False
+        if (hasattr(self.main_window, 'working_point_cloud') and 
+            self.main_window.working_point_cloud is not None and 
+            hasattr(self.main_window, 'original_point_cloud') and 
+            self.main_window.original_point_cloud is not None):
+            is_cropped = len(self.main_window.working_point_cloud.points) < len(self.main_window.original_point_cloud.points)
+            
+        is_clipping_active = (hasattr(self.main_window, 'pyvista_widget') and 
+                              self.main_window.pyvista_widget is not None and 
+                              self.main_window.pyvista_widget.clipping_state.is_active)
+        
+        if is_cropped:
+            self.reset_clip_btn.setText("Reset Workspace")
+            self.reset_clip_btn.setEnabled(True)
+            self.crop_btn.setEnabled(False)  # Crop is disabled since clipping deactivates after crop
+        else:
+            self.reset_clip_btn.setText("Reset Clip Box")
+            summary = self.main_window.pyvista_widget.clipping_state.summary if is_clipping_active else ""
+            self.reset_clip_btn.setEnabled(is_clipping_active and bool(summary))
+            self.crop_btn.setEnabled(is_clipping_active and bool(summary))
+
+    def set_clear_measurements_enabled(self, enabled: bool):
+        """Enable or disable the Clear All Measurements button."""
+        self.clear_measurements_btn.setEnabled(enabled)
+
+    def set_clipping_checked(self, checked: bool):
+        """Programmatically set the clipping checkbox without emitting toggled."""
+        self.clipping_checkbox.blockSignals(True)
+        self.clipping_checkbox.setChecked(checked)
+        self.clipping_checkbox.blockSignals(False)
+
+    def set_measure_checked(self, checked: bool):
+        """Programmatically set the measure button without emitting toggled."""
+        self.measure_btn.blockSignals(True)
+        self.measure_btn.setChecked(checked)
+        self.measure_btn.blockSignals(False)

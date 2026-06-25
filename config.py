@@ -9,7 +9,32 @@ ICON_PATH = ASSETS_DIR / "visualizer_icon.ico"
 # Application Metadata
 APP_NAME = "PCD Visualizer"
 APP_VERSION = "2.0"
-ORGANIZATION_NAME = "PCDVisualizer"
+ORGANIZATION_NAME = "Quantnueral Pvt. Ltd."
+ORGANIZATION_DOMAIN = "quantneural.com"
+
+# Packaging parameters
+EXECUTABLE_NAME = "PCDVisualizer"
+INSTALLER_BASENAME = "PCDVisualizer_Setup"
+
+# Logging settings
+LOGGER_NAME = "pointviz"
+LOG_SUBDIR = ".pointviz"
+LOG_FILENAME = "pointviz.log"
+LOG_MAX_BYTES = 5 * 1024 * 1024 # 5 MB
+LOG_BACKUP_COUNT = 3
+
+# File loading settings
+SUPPORTED_EXTENSIONS = ['.pcd', '.ply']
+LOAD_FILE_FILTER = "Point Cloud Data (*.pcd *.ply);;PCD Files (*.pcd);;PLY Files (*.ply);;All Files (*)"
+SAVE_FILE_FILTER = "PCD Files (*.pcd);;PLY Files (*.ply);;All Files (*)"
+SCREENSHOT_FILE_FILTER = "PNG Files (*.png);;JPEG Files (*.jpg);;All Files (*)"
+
+# Default output names
+DEFAULT_EXPORT_FILENAME = "exported_cloud.pcd"
+DEFAULT_SCREENSHOT_FILENAME = "screenshot.png"
+
+# Default rendering parameters
+FALLBACK_POINT_COLOR = [128, 128, 255]
 
 # Performance and Limits
 LARGE_FILE_THRESHOLD_MB = 100
@@ -25,12 +50,12 @@ OPENGL_STENCIL_BUFFER_SIZE = 8
 
 # Visualization modes
 BACKGROUND_STYLES = {
-    'White': 'white',
-    'Black': 'black',
-    'Gray': '#f0f0f0',
     'Gradient': ('white', 'lightblue'),
     'Dark Gradient': ('#1A1A26', '#212136'),
-    'Sunset Gradient': ('#ffeaa7', '#fd79a8')
+    'Sunset Gradient': ('#ffeaa7', '#fd79a8'),
+    'White': 'white',
+    'Black': 'black',
+    'Gray': '#f0f0f0'
 }
 
 COLOR_MODES = {

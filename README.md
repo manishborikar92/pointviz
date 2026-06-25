@@ -127,20 +127,33 @@ python pcd_visualizer.py path/to/cloud.pcd
 
 ## Building for Distribution (Windows)
 
-The `packaging/` directory contains a complete Windows distribution pipeline:
+The `packaging/` directory contains a complete Windows distribution pipeline. 
 
+### Recommended Build Process
+From the project root, execute the build script:
 ```bash
-# From the project root, run:
 packaging\build_visualizer.bat
 ```
 
-This will:
-1. Create/activate a virtual environment
-2. Install dependencies from `requirements.txt`
-3. Build a single-file executable via PyInstaller
-4. Optionally create a Windows installer via Inno Setup (if installed)
+This script automates the following steps:
+1. Creates/activates the local virtual environment.
+2. Installs required python dependencies from `requirements.txt`.
+3. Compiles a standalone executable via PyInstaller.
+4. If Inno Setup is installed, compiles the Windows installer.
 
-Output: `dist/PCDVisualizer.exe` and optionally `dist/PCDVisualizer_Setup_v1.0.exe`
+### Installer Compilation & Single Source of Truth
+The Inno Setup script (`packaging/visualizer_installer.iss`) is **intentionally designed to be compiled exclusively via `packaging/build_visualizer.bat`**.
+
+**Why this approach was chosen:**
+Instead of duplicating application identity metadata (such as version or publisher details) directly in the `.iss` file, the build script extracts these constants dynamically from `config.py` (the single source of truth) and injects them as preprocessor variables (`/DAppName`, `/DAppVersion`, etc.) into Inno Setup (`ISCC.exe`) at build time. Compiling the `.iss` file directly outside the batch script will fail due to these missing definitions, guaranteeing metadata consistency across the executable and the installer.
+
+### Application Identity Parameters
+The following metadata configurations are defined in `config.py`:
+* **`APP_NAME`**: The user-facing display name of the application (e.g., `"PCD Visualizer"`). This is used in shortcut titles, application window titles, and menus.
+* **`EXECUTABLE_NAME`**: The file name of the generated standalone binary (without `.exe`, e.g., `"PCDVisualizer"`). This defines the process and system name for file associations and installation paths.
+* **`INSTALLER_BASENAME`**: The filename prefix for the generated installer (e.g., `"PCDVisualizer_Setup"`), which will be output as `dist/[INSTALLER_BASENAME]_v[APP_VERSION].exe`.
+
+Outputs will be generated under the `dist/` directory.
 
 ## License
 

@@ -12,7 +12,8 @@ from config import (
     OPENGL_STENCIL_BUFFER_SIZE,
     APP_NAME,
     APP_VERSION,
-    ORGANIZATION_NAME
+    ORGANIZATION_NAME,
+    ORGANIZATION_DOMAIN
 )
 from logger import setup_logging, logger
 from gui.main_window import PCDVisualizer
@@ -67,6 +68,7 @@ def main():
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(APP_VERSION)
     app.setOrganizationName(ORGANIZATION_NAME)
+    app.setOrganizationDomain(ORGANIZATION_DOMAIN)
     app.setStyle('Fusion')  # Modern look
     
     # 4. Configure OpenGL and PyVista

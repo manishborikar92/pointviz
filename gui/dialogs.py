@@ -5,8 +5,9 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                              QPushButton, QWidget, QButtonGroup, QRadioButton, 
                              QDoubleSpinBox)
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QIcon
 
-from config import DEFAULT_VOXEL_SIZE
+from config import ASSETS_DIR, DEFAULT_VOXEL_SIZE, APP_NAME, APP_VERSION, ORGANIZATION_NAME
 
 class LoadOptionsDialog(QDialog):
     """A dialog to get downsampling options from the user for large files."""
@@ -79,14 +80,15 @@ class AboutDialog(QDialog):
     """Shows a custom, resizable 'About' dialog."""
     def __init__(self, is_dark_mode: bool, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("About PCD Visualizer")
+        self.setWindowTitle(f"About {APP_NAME}")
         self.setMinimumSize(420, 380)
         self.is_dark_mode = is_dark_mode
         self.init_ui()
 
     def init_ui(self):
-        about_text = """
-        <h3>PCD Point Cloud Visualizer</h3>
+        about_text = f"""
+        <h3>{APP_NAME}</h3>
+        <p><b>Version: {APP_VERSION}</b></p>
         <p>A powerful and responsive tool for visualizing 3D point cloud data files (e.g., .pcd, .ply).</p>
         <p>This visualizer is designed to handle large datasets efficiently, providing a smooth user experience for inspection and analysis.</p>
         
@@ -101,22 +103,20 @@ class AboutDialog(QDialog):
             <li>Export capabilities for screenshots and data</li>
         </ul>
 
-        <!-- <p>Developed by: <b>Quantnueral Pvt. Ltd.</b></p> -->
+        <p>Developed by: <b>{ORGANIZATION_NAME}</b></p>
         """
 
         layout = QVBoxLayout()
         
         # Add company logo with theme detection
-        # logo_label = QLabel()
+        logo_label = QLabel()
         
         # Choose logo based on theme
-        # logo_filename = "logo_dark.png" if self.is_dark_mode else "logo_light.png"
-        # from config import ASSETS_DIR
-        # logo_path = ASSETS_DIR / logo_filename
+        logo_filename = "logo_dark.png" if self.is_dark_mode else "logo_light.png"
+        logo_path = ASSETS_DIR / logo_filename
 
-        # from PyQt6.QtGui import QIcon
-        # logo_label.setPixmap(QIcon(str(logo_path)).pixmap(140, 25))
-        # logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        logo_label.setPixmap(QIcon(str(logo_path)).pixmap(140, 25))
+        logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         label = QLabel(about_text)
         label.setWordWrap(True)
@@ -126,15 +126,15 @@ class AboutDialog(QDialog):
         ok_button = QPushButton("OK")
         ok_button.clicked.connect(self.accept)
         
-        # layout.addWidget(logo_label)
+        layout.addWidget(logo_label)
         
-        # layout.addSpacing(5)
-        # separator = QWidget()
-        # separator.setFixedHeight(1)
-        # separator_color = "#5a5a5a" if self.is_dark_mode else "#d0d0d0"
-        # separator.setStyleSheet(f"background-color: {separator_color};")
-        # layout.addWidget(separator)
-        # layout.addSpacing(5)
+        layout.addSpacing(5)
+        separator = QWidget()
+        separator.setFixedHeight(1)
+        separator_color = "#5a5a5a" if self.is_dark_mode else "#d0d0d0"
+        separator.setStyleSheet(f"background-color: {separator_color};")
+        layout.addWidget(separator)
+        layout.addSpacing(5)
         
         layout.addWidget(label)
         layout.addStretch()
