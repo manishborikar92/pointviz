@@ -20,7 +20,6 @@ def setup_menus(window):
     # Help menu
     help_menu = menubar.addMenu('Help')
     _add_help_menu_actions(window, help_menu)
-
 def _add_file_menu_actions(window, file_menu):
     """Add actions to file menu."""
     # Open action
@@ -64,6 +63,7 @@ def _add_view_menu_actions(window, view_menu):
 def _add_help_menu_actions(window, help_menu):
     """Add actions to help menu."""
     actions = [
+        ("How to Use", "F1", window.show_how_to_use),
         ("About", None, window.show_about)
     ]
     _add_menu_actions(window, help_menu, actions)

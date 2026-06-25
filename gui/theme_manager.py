@@ -76,12 +76,80 @@ STYLESHEET_TEMPLATE = """
     QCheckBox::indicator:unchecked {{ background-color: {bg_combo}; border: 1px solid {border_color}; }}
     QCheckBox::indicator:checked {{ background-color: #2a82da; border: 1px solid {border_color}; }}
     QTabWidget::pane {{ border: 1px solid {border_color}; background-color: {bg_tab_pane}; }}
+    QTabWidget::tab-bar {{ left: 0px; right: 0px; }}
     QTabBar::tab {{
         background-color: {bg_button}; border: 1px solid {border_color}; padding: 8px 16px;
         margin-right: 2px; color: {fg_main};
     }}
     QTabBar::tab:selected {{ background-color: #2a82da; color: white; border-bottom: 1px solid #2a82da; }}
+    QTabBar::scroller {{
+        width: 0px;
+        height: 0px;
+    }}
+    QTabBar QToolButton {{
+        width: 0px;
+        height: 0px;
+        border: none;
+        background: transparent;
+    }}
     QScrollArea {{ border: none; background-color: {bg_tab_pane}; }}
+    QTextBrowser {{ border: none; background-color: transparent; }}
+    QScrollBar:vertical {{
+        border: none;
+        background: transparent;
+        width: 10px;
+        margin: 0px;
+    }}
+    QScrollBar::handle:vertical {{
+        background: {border_color};
+        min-height: 20px;
+        border-radius: 5px;
+    }}
+    QScrollBar::handle:vertical:hover {{
+        background: #2a82da;
+    }}
+    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+        border: none;
+        background: none;
+        height: 0px;
+        width: 0px;
+    }}
+    QScrollBar::up-arrow:vertical, QScrollBar::down-arrow:vertical {{
+        border: none;
+        background: none;
+        image: none;
+    }}
+    QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+        background: none;
+    }}
+    QScrollBar:horizontal {{
+        border: none;
+        background: transparent;
+        height: 10px;
+        margin: 0px;
+    }}
+    QScrollBar::handle:horizontal {{
+        background: {border_color};
+        min-width: 20px;
+        border-radius: 5px;
+    }}
+    QScrollBar::handle:horizontal:hover {{
+        background: #2a82da;
+    }}
+    QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
+        border: none;
+        background: none;
+        width: 0px;
+        height: 0px;
+    }}
+    QScrollBar::left-arrow:horizontal, QScrollBar::right-arrow:horizontal {{
+        border: none;
+        background: none;
+        image: none;
+    }}
+    QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{
+        background: none;
+    }}
     QProgressBar {{
         border: 1px solid {border_color}; border-radius: 3px; text-align: center;
         background-color: {bg_slider_groove}; color: {fg_main};

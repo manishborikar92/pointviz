@@ -22,7 +22,7 @@ import core.statistics as statistics
 from gui.control_panel import ControlPanel
 from gui.visualization_panel import VisualizationPanel
 from enum import Enum
-from gui.dialogs import AboutDialog, LoadOptionsDialog
+from gui.dialogs import AboutDialog, LoadOptionsDialog, HowToUseDialog
 from gui.menus import setup_menus
 from gui.theme_manager import apply_theme
 
@@ -764,6 +764,11 @@ Average Magnitude: {avg_magnitude:.6f}"""
     def show_about(self):
         """Shows custom About dialog."""
         dialog = AboutDialog(self.is_dark_mode, self)
+        dialog.exec()
+    
+    def show_how_to_use(self):
+        """Shows the interactive How to Use user guide dialog."""
+        dialog = HowToUseDialog(self.is_dark_mode, self)
         dialog.exec()
     
     # Drag and Drop Events
