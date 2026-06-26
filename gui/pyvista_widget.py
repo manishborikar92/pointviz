@@ -43,7 +43,7 @@ class PyVistaWidget(QWidget):
         # Track current visualization settings
         self.current_point_size = DEFAULT_POINT_SIZE
         self.current_color_mode = 'Original'
-        self.current_background = 'Gradient'
+        self.current_background = 'Sky Horizon'
         self.show_normals = False
 
         # Working Set Clipping state
@@ -75,7 +75,7 @@ class PyVistaWidget(QWidget):
             )
             
             # Set initial gradient background
-            self.set_background_style('Gradient')
+            self.set_background_style('Sky Horizon')
             
             # Add basic lighting with error handling
             try:

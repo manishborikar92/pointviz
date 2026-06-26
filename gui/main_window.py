@@ -22,7 +22,7 @@ import core.statistics as statistics
 from gui.control_panel import ControlPanel
 from gui.visualization_panel import VisualizationPanel
 from enum import Enum
-from gui.dialogs import AboutDialog, LoadOptionsDialog
+from gui.dialogs import AboutDialog, LoadOptionsDialog, HowToUseDialog
 from gui.menus import setup_menus
 from gui.theme_manager import apply_theme
 
@@ -46,7 +46,7 @@ class PCDVisualizer(QMainWindow):
         self.initial_file_path = initial_file_path
         
         # Initialize theme
-        self.is_dark_mode = self._get_system_theme_preference()
+        self.is_dark_mode = self.settings.value("is_dark_mode", self._get_system_theme_preference(), type=bool)
         
         self.init_ui()
         self.apply_theme(self.is_dark_mode)
@@ -745,8 +745,9 @@ Average Magnitude: {avg_magnitude:.6f}"""
     
     # Theme management
     def toggle_theme(self):
-        """Toggle between dark and light mode."""
+        """Toggle between dark and light modes."""
         self.is_dark_mode = not self.is_dark_mode
+        self.settings.setValue("is_dark_mode", self.is_dark_mode)
         self.apply_theme(self.is_dark_mode)
         
     def apply_theme(self, is_dark: bool):
@@ -764,6 +765,11 @@ Average Magnitude: {avg_magnitude:.6f}"""
     def show_about(self):
         """Shows custom About dialog."""
         dialog = AboutDialog(self.is_dark_mode, self)
+        dialog.exec()
+    
+    def show_how_to_use(self):
+        """Shows the interactive How to Use user guide dialog."""
+        dialog = HowToUseDialog(self.is_dark_mode, self)
         dialog.exec()
     
     # Drag and Drop Events
