@@ -4,18 +4,18 @@ from logger import logger
 
 # ─── Dark Theme ───────────────────────────────────────────────────────────────
 DARK_THEME = {
-    'bg_main': '#353535',
-    'fg_main': '#ffffff',
-    'border_color': '#5a5a5a',
-    'bg_button': '#454545',
-    'bg_button_hover': '#565656',
-    'bg_button_disabled': '#2a2a2a',
-    'fg_disabled': '#7f7f7f',
-    'bg_slider_groove': '#353535',
-    'bg_combo': '#454545',
-    'bg_tab_pane': '#353535',
-    'bg_menubar': '#353535',
-    'accent': '#2a82da',
+    'bg_main': '#0F172A',
+    'fg_main': '#F8FAFC',
+    'border_color': '#334155',
+    'bg_button': '#1E293B',
+    'bg_button_hover': '#334155',
+    'bg_button_disabled': '#0F172A',
+    'fg_disabled': '#64748B',
+    'bg_slider_groove': '#0F172A',
+    'bg_combo': '#1E293B',
+    'bg_tab_pane': '#0F172A',
+    'bg_menubar': '#0F172A',
+    'accent': '#38BDF8',
 }
 
 # ─── Light Theme ──────────────────────────────────────────────────────────────
