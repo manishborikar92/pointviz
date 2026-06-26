@@ -51,16 +51,12 @@ OPENGL_STENCIL_BUFFER_SIZE = 8
 # Visualization modes
 BACKGROUND_STYLES = {
     # Gradients
-    'Sky Horizon':      ('white', 'lightblue'),
-    'Golden Sunset':    ('#ffeaa7', '#fd79a8'),
-    'Deep Ocean':       ('#0a0a1a', '#0d3b6e'),
-    'Cosmic Night':     ('#1A1A26', '#212136'),
-    'Midnight Void':    ('#0a0a0a', '#1a1a2e'),
-    'Forest Dusk':      ('#0b1311', '#1a3a2a'),
+    'Sky Horizon': ('white', 'lightblue'),
+    'Golden Sunset': ('#ffeaa7', '#fd79a8'),
+    'Midnight Void': ('#0a0a0a', '#1a1a2e'),
     # Solids
-    'Soft Slate':       '#1e2030',
-    'White':            'white',
-    'Black':            'black',
+    'Black': 'black',
+    'White': 'white',
 }
 
 COLOR_MODES = {

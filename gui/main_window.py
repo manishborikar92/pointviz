@@ -46,7 +46,7 @@ class PCDVisualizer(QMainWindow):
         self.initial_file_path = initial_file_path
         
         # Initialize theme
-        self.is_dark_mode = self._get_system_theme_preference()
+        self.is_dark_mode = self.settings.value("is_dark_mode", self._get_system_theme_preference(), type=bool)
         
         self.init_ui()
         self.apply_theme(self.is_dark_mode)
@@ -745,8 +745,9 @@ Average Magnitude: {avg_magnitude:.6f}"""
     
     # Theme management
     def toggle_theme(self):
-        """Toggle between dark and light mode."""
+        """Toggle between dark and light modes."""
         self.is_dark_mode = not self.is_dark_mode
+        self.settings.setValue("is_dark_mode", self.is_dark_mode)
         self.apply_theme(self.is_dark_mode)
         
     def apply_theme(self, is_dark: bool):
