@@ -144,69 +144,48 @@ class AboutDialog(QDialog):
 
 
 class HowToUseDialog(QDialog):
-    """A comprehensive interactive guide dialog documenting all implemented features in pointviz."""
+    """A clean interactive guide dialog that hands all layout and styling completely to the theme manager."""
     def __init__(self, is_dark_mode: bool, parent=None):
         super().__init__(parent)
         self.setWindowTitle(f"How to Use - {APP_NAME}")
-        self.setMinimumSize(780, 560)
-        self.resize(800, 600)
+        self.setMinimumSize(850, 580)
+        self.resize(900, 620)
         self.is_dark_mode = is_dark_mode
         self.init_ui()
 
     def init_ui(self):
+        # Direct root layout with clean margins to prevent window-edge crowding
         layout = QVBoxLayout()
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(0)
         
-        # Header
-        header_layout = QHBoxLayout()
-        logo_label = QLabel()
-        logo_filename = "logo_dark.png" if self.is_dark_mode else "logo_light.png"
-        logo_path = ASSETS_DIR / logo_filename
-        if logo_path.exists():
-            logo_label.setPixmap(QIcon(str(logo_path)).pixmap(140, 25))
-        
-        title_label = QLabel(f"<h2>{APP_NAME} - User Guide</h2>")
-        title_label.setTextFormat(Qt.TextFormat.RichText)
-        
-        header_layout.addWidget(title_label)
-        header_layout.addStretch()
-        header_layout.addWidget(logo_label)
-        layout.addLayout(header_layout)
-        
-        # Separator line
-        separator = QWidget()
-        separator.setFixedHeight(1)
-        separator_color = "#5a5a5a" if self.is_dark_mode else "#d0d0d0"
-        separator.setStyleSheet(f"background-color: {separator_color};")
-        layout.addWidget(separator)
-        layout.addSpacing(5)
-        
-        # Tab Widget
         self.tab_widget = QTabWidget()
+        self.tab_widget.setDocumentMode(True)
         self.tab_widget.tabBar().setExpanding(True)
-        self.tab_widget.setUsesScrollButtons(False)
+        self.tab_widget.setUsesScrollButtons(True)
         
-        # Define tabs content
+        # Combined hotkeys & tricks dataset
         tabs_data = [
             ("Getting Started", self._get_getting_started_html()),
-            ("Navigation && Views", self._get_navigation_html()),
+            ("Navigation and Views", self._get_navigation_html()),
             ("Visualization Settings", self._get_visualization_html()),
-            ("Clipping && Cropping", self._get_clipping_html()),
-            ("Measurements Settings", self._get_measurements_html())
+            ("Clipping and Cropping", self._get_clipping_html()),
+            ("Measurements", self._get_measurements_html()),
+            ("Shortcuts and Tips", self._get_shortcuts_and_tips_html())
         ]
         
         for title, html_content in tabs_data:
-            # Text browser for each tab to wrap text perfectly and prevent horizontal scrolling
             text_browser = QTextBrowser()
             text_browser.setHtml(html_content)
             text_browser.setOpenExternalLinks(True)
             text_browser.setFrameShape(QFrame.Shape.NoFrame)
             text_browser.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-            text_browser.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-            text_browser.setStyleSheet("QTextBrowser { background-color: transparent; border: none; padding: 10px; }")
+            text_browser.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            
+            # Styling is completely handled by the theme manager
             self.tab_widget.addTab(text_browser, title)
             
         layout.addWidget(self.tab_widget)
-        
         self.setLayout(layout)
 
     def _get_getting_started_html(self) -> str:
@@ -288,7 +267,7 @@ class HowToUseDialog(QDialog):
         <p>Choose from the <b>Background</b> dropdown to change the canvas background. Styles include:</p>
         <ul>
             <li><b>Gradient:</b> A soft blue-to-white gradient.</li>
-            <li><b>Dark Gradient:</b> A modern deep slate-to-navy gradient (recommended for dark mode).</li>
+            <li><b>Dark Gradient:</b> A modern deep slate-to-navy gradient.</li>
             <li><b>Sunset Gradient:</b> A vibrant warm peach-to-pink gradient.</li>
             <li><b>Solid Colors:</b> Solid White, Black, or Gray backgrounds to maximize contrast.</li>
         </ul>
@@ -348,8 +327,8 @@ class HowToUseDialog(QDialog):
 
     def _get_measurements_html(self) -> str:
         return """
-        <h2>Measurements, Shortcuts & Tips</h2>
-        <p>Perform precise 3D distance measurements and utilize keyboard shortcuts for an efficient workflow.</p>
+        <h2>3D Distance Measurements</h2>
+        <p>Perform precise 3D distance measurements between physical geometric locations across your model canvas.</p>
 
         <h3>1. Point-to-Point Distance Measurement</h3>
         <p>Measure the exact 3D distance between any two points in your point cloud:</p>
@@ -362,12 +341,16 @@ class HowToUseDialog(QDialog):
             <li><b>Exit/Cancel:</b> Press <b>ESC</b> or click <b>Stop Measuring</b> to exit the picker tool.</li>
             <li><b>Clear:</b> Click <b>Clear Measurements</b> in the sidebar (or <b>Tools &gt; Clear Measurements</b>) to remove all lines and labels from the screen.</li>
         </ul>
+        """
 
-        <h3>2. Keyboard Shortcuts Quick Reference</h3>
-        <table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse; border: 1px solid #5a5a5a; width: 100%; margin-top: 10px;">
-            <tr style="background-color: #2a82da; color: white; font-weight: bold;">
-                <th style="text-align: left; padding: 6px;">Action</th>
-                <th style="text-align: left; padding: 6px;">Shortcut</th>
+    def _get_shortcuts_and_tips_html(self) -> str:
+        return """
+        <h2>Keyboard Shortcuts Quick Reference</h2>
+        <p>Use these hotkeys anywhere in the application to optimize your workflow pipeline and speed up common layout shifts.</p>
+        <table>
+            <tr>
+                <th>Action</th>
+                <th>Shortcut</th>
             </tr>
             <tr><td>Open Point Cloud File</td><td><b>Ctrl+O</b></td></tr>
             <tr><td>Export Point Cloud</td><td><b>Ctrl+E</b></td></tr>
@@ -386,10 +369,10 @@ class HowToUseDialog(QDialog):
             <tr><td>Cancel Active Tool / Stop Measuring</td><td><b>ESC</b></td></tr>
         </table>
 
-        <h3>3. Best Practices & Pro-Tips</h3>
+        <h3>Best Practices & Pro-Tips</h3>
         <ul>
-            <li><b>Performance:</b> If the 3D rendering feels sluggish, reduce the <b>Point Size</b> slider or reload the file using the <b>Voxel Downsample</b> option.</li>
+            <li><b>Performance Optimization:</b> If the 3D rendering feels sluggish, reduce the <b>Point Size</b> slider or reload the file using the <b>Voxel Downsample</b> option.</li>
             <li><b>Color Mode Analysis:</b> Use the <b>Curvature</b> color mode to highlight structural seams, cracks, or geometric edges in mechanical parts. Use the <b>Height</b> mode for terrain scan analysis.</li>
-            <li><b>Statistics Panel:</b> The statistics panel at the bottom-right updates dynamically. Look at the <b>Geometric Stats</b> section to view real-time changes in bounding box volume and point density as you clip or crop the cloud.</li>
+            <li><b>Dynamic Statistics Panel:</b> The statistics panel at the bottom-right updates dynamically. Look at the <b>Geometric Stats</b> section to view real-time changes in bounding box volume and point density as you clip or crop the cloud.</li>
         </ul>
         """

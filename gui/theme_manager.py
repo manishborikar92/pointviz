@@ -77,6 +77,7 @@ STYLESHEET_TEMPLATE = """
     QCheckBox::indicator:checked {{ background-color: #2a82da; border: 1px solid {border_color}; }}
     QTabWidget::pane {{ border: 1px solid {border_color}; background-color: {bg_tab_pane}; }}
     QTabWidget::tab-bar {{ left: 0px; right: 0px; }}
+    QTabBar {{ qproperty-drawBase: 0; }}
     QTabBar::tab {{
         background-color: {bg_button}; border: 1px solid {border_color}; padding: 8px 16px;
         margin-right: 2px; color: {fg_main};
@@ -93,7 +94,28 @@ STYLESHEET_TEMPLATE = """
         background: transparent;
     }}
     QScrollArea {{ border: none; background-color: {bg_tab_pane}; }}
-    QTextBrowser {{ border: none; background-color: transparent; }}
+    QTextBrowser {{
+        border: none;
+        background-color: transparent;
+        padding: 10px;
+    }}
+    QTextBrowser table {{
+        border-collapse: collapse;
+        width: 100%;
+        margin-top: 10px;
+        margin-bottom: 10px;
+    }}
+    QTextBrowser th {{
+        background-color: {bg_button};
+        padding: 8px;
+        border: 1px solid {border_color};
+        font-weight: bold;
+        text-align: left;
+    }}
+    QTextBrowser td {{
+        padding: 8px;
+        border: 1px solid {border_color};
+    }}
     QScrollBar:vertical {{
         border: none;
         background: transparent;
